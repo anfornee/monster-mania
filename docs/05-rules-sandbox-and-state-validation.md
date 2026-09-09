@@ -295,7 +295,7 @@ Every regular Monster should exist in exactly one legal location:
 There are:
 
 ```text
-16 regular Monsters
+17 regular Monsters
 ```
 
 The Infinity Beast is separate and should not be counted among them.
@@ -511,7 +511,7 @@ Expected result:
 - Exactly 3 undefeated regular Monsters remain
 - All 3 are face-up
 - Monster deck contains no additional undefeated regular Monsters
-- Defeated piles account for the other 13 regular Monsters
+- Defeated piles account for the other 14 regular Monsters
 
 This state must pass monster-conservation validation.
 
@@ -529,6 +529,7 @@ This should construct a valid end-of-regular-game state where:
 
 - All regular Monsters are defeated
 - Both players have equal scores
+- Each player has 12 points
 - Both players are tied for highest score
 - Sudden Death has not yet started unless requested
 

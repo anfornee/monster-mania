@@ -387,6 +387,12 @@ export const monsters = [
 		requiredWeapons: ['grenade', 'sword'],
 	},
 	{
+		id: 'slice-and-dice',
+		name: 'Slice and Dice',
+		points: 1,
+		requiredWeapons: ['sword', 'spear'],
+	},
+	{
 		id: 'pincher',
 		name: 'Pincher',
 		points: 2,

@@ -57,7 +57,7 @@ The Black Hole is removed from play during Sudden Death.
 
 There is **1 copy of each Monster**.
 
-The normal game contains **16 Monsters**.
+The normal game contains **17 Monsters**.
 
 ## 1-Point Monsters
 
@@ -75,10 +75,11 @@ Each 1-point Monster requires **2 Weapons**.
 | Rocket Chopper | Grenade + Spear  |      1 |
 | Wacker         | Mace + Sword     |      1 |
 | Chomper        | Grenade + Sword  |      1 |
+| Slice and Dice | Sword + Spear    |      1 |
 
-**1-point Monsters: 10**
+**1-point Monsters: 11**
 
-**Total available points: 10**
+**Total available points: 11**
 
 ---
 
@@ -118,15 +119,15 @@ The 3-point Monster requires **4 Weapons**.
 
 The regular Monster deck contains:
 
-* 10 × 1-point Monsters
+* 11 × 1-point Monsters
 * 5 × 2-point Monsters
 * 1 × 3-point Monster
 
-**Total Monsters: 16**
+**Total Monsters: 17**
 
-**Total available points: 23**
+**Total available points: 24**
 
-Because 23 is an odd number, not every game can result in a tied score. However, ties between two or more players remain possible depending on how the Monsters are divided.
+Because 24 is even, a two-player game can end in a 12–12 tie, which triggers Sudden Death.
 
 ---
 
@@ -175,10 +176,10 @@ The Infinity Beast does not actually add points to a player's normal score. Its 
 
 | Type                             |  Cards |
 | -------------------------------- | -----: |
-| 1-point Monsters                 |     10 |
+| 1-point Monsters                 |     11 |
 | 2-point Monsters                 |      5 |
 | 3-point Monsters                 |      1 |
 | Infinity Beast                   |      1 |
-| **Total physical Monster cards** | **17** |
+| **Total physical Monster cards** | **18** |
 
-Of those 17 Monster cards, **16 are used during the normal game** and **1 is reserved for Sudden Death**.
+Of those 18 Monster cards, **17 are used during the normal game** and **1 is reserved for Sudden Death**.
