@@ -65,6 +65,7 @@ The structure grows by milestone, so some destination directories may not exist 
 - [Rules sandbox and validation](docs/05-rules-sandbox-and-state-validation.md)
 - [Tabletop UX and presentation](docs/06-tabletop-ux-and-presentation.md)
 - [Asset loading and cache strategy](docs/07-asset-loading-and-cache-strategy.md)
+- [Firebase deployment](docs/deployment.md)
 - [Visual design guide](docs/card-game-visual-design-guide.md)
 - [Online Table implementation guide](docs/online-table-implementation-guide.md)
 
