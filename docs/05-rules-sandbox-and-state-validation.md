@@ -13,17 +13,21 @@ Monster Mania has several gameplay states that would be slow or unreliable to re
 Examples:
 
 - A player at exactly 5 cards who wants to skip
-- A Draw 2 that pushes a hand above the limit
-- The shared draw pile becoming empty
+- A Draw 2 Action that pushes a hand above the limit
+- An Action chain where one Draw Action produces another Action
+- Attempting to play an Action after Weapon play has begun
+- The shared Draw pile becoming empty
 - Monster rotation during deck recycling
 - Exactly 3 Monsters remaining
 - A specific Monster being beatable
 - A specific Monster being intentionally unbeatable
+- Ultimate Weapon usage
 - Black Hole usage
 - A tied end-game score
 - Sudden Death
 - Infinity Beast victory
 - Persistence recovery from unusual phases
+- Alternate legal Monster mixes with a different point distribution
 
 The Rules Sandbox should allow these situations to be constructed directly.
 
@@ -94,12 +98,15 @@ Use it for almost all routine testing.
 Examples:
 
 - Give Player 1 a Grenade
+- Give Player 1 a Draw 2 Action
 - Set Player 2 to 5 cards
+- Create a chainable Action scenario
 - Make Ground Worm beatable
 - Put the game into final-three state
 - Force a valid score tie
 - Enter valid Sudden Death
-- Empty the draw pile while preserving all card counts
+- Empty the Draw pile while preserving all card counts
+- Build an alternate legal 17-Monster mix
 
 Every resulting state should pass:
 
@@ -117,11 +124,14 @@ Examples:
 
 - Duplicate card instance IDs
 - Missing cards
+- Wrong category totals
 - Impossible phase combinations
-- Empty draw and discard piles
+- Empty Draw and discard piles
 - Unknown Monster IDs
+- Unknown Action-effect IDs
 - Hand above normal limits
 - Invalid current player index
+- Action Phase marked open after Monster-defeat play begins
 
 Unsafe mode is only for:
 
@@ -146,11 +156,15 @@ Suggested functions:
 createSandboxState()
 setCurrentPlayer()
 setPhase()
+setActionPhaseOpen()
 giveCardToPlayer()
+giveActionCard()
+giveUltimateWeapon()
 removeCardFromPlayer()
 setPlayerHand()
 setDrawPile()
 setDiscardPile()
+setRemovedCards()
 setFaceUpMonsters()
 setMonsterDeck()
 setDefeatedMonsters()
@@ -159,10 +173,20 @@ forceFinalThree()
 forceDrawPileRecycle()
 makeMonsterBeatable()
 makeMonsterUnbeatable()
-giveBlackHole()
+buildActionChain()
 forceTie()
 prepareSuddenDeath()
 ```
+
+Core convenience wrappers may include:
+
+```ts
+giveDraw1()
+giveDraw2()
+giveBlackHole()
+```
+
+These should wrap generic card-giving helpers rather than create separate state systems.
 
 ---
 
@@ -244,6 +268,8 @@ The validator should check at least the following.
 - Every player card instance has an `instanceId`
 - Every `instanceId` is unique
 - Every `cardId` maps to a known player-card definition
+- Every player-card definition has a recognized category
+- Action cards reference recognized Action effects
 - No card instance exists in two locations simultaneously
 
 Locations include:
@@ -252,34 +278,44 @@ Locations include:
 - Player 2 hand
 - Draw pile
 - Discard pile
-- Removed-from-game zone if introduced
+- Removed-from-game zone
 
 ---
 
-## Shared Deck Conservation
+## Standard Shared Deck Conservation
 
-For legal-mode states:
+For standard legal-mode states:
 
-The total number of player card instances across all legal zones should equal the expected shared-deck count.
-
-Current total:
+The total number of player-card instances across all legal zones should equal:
 
 ```text
 24 cards
+```
+
+Category totals should equal:
+
+```text
+18 Weapon cards
+5 Action cards
+1 Ultimate Weapon
 ```
 
 This should include:
 
 ```text
 player hands
-+ draw pile
++ Draw pile
 + discard pile
 + valid removed cards
 ```
 
-If Black Hole is removed for Sudden Death, account for that explicitly.
+During Sudden Death, the Ultimate Weapon may be in the removed-from-game zone.
 
-Avoid silently losing it.
+It must still be accounted for.
+
+Do not silently lose it.
+
+For future explicitly supported rule variants, category totals may be supplied by the active ruleset instead of hard-coded globally.
 
 ---
 
@@ -298,15 +334,37 @@ There are:
 17 regular Monsters
 ```
 
-The Infinity Beast is separate and should not be counted among them.
+The dedicated Sudden Death Monster is separate and should not be counted among them.
+
+---
+
+## Monster Distribution Flexibility
+
+Validation must **not** require:
+
+```text
+11 × 1-point
+5 × 2-point
+1 × 3-point
+```
+
+That is the current core-set inventory, not a standard-game invariant.
+
+A legal alternate Monster mix is valid when:
+
+- There are exactly 17 regular Monsters
+- Each Monster definition is valid
+- Every Monster exists in exactly one legal location
+- Point values and requirements follow supported card definitions
+- No Monster is duplicated illegally
 
 ---
 
 ## Monster Uniqueness
 
 - No regular Monster ID may appear twice
-- Infinity Beast may exist only in appropriate Sudden Death state
-- Infinity Beast must never appear inside the regular Monster deck
+- Sudden Death Monster may exist only in appropriate Sudden Death state
+- Sudden Death Monster must never appear inside the regular Monster deck
 
 ---
 
@@ -316,6 +374,28 @@ The Infinity Beast is separate and should not be counted among them.
 - Exactly one current player exists
 - Only the current player can perform normal turn actions
 - Turn handoff state should not expose an active playable hand
+- A player may defeat no more than one Monster in a turn
+
+---
+
+## Action Phase Integrity
+
+Track Action timing explicitly enough to validate it.
+
+Valid behavior:
+
+- Action Phase is open at the start of a normal turn
+- Multiple Actions may resolve while it is open
+- Newly received Actions may be played while it is open
+- Action Phase closes when Weapon / Ultimate Weapon Monster-defeat play begins
+- Action Phase never reopens during that same turn
+
+Invalid behavior:
+
+- Playing an Action after Monster-defeat play has begun
+- Playing an Action during turn handoff
+- Playing an Action for a non-current player
+- Leaving unresolved forced discard and continuing Action play
 
 ---
 
@@ -325,16 +405,19 @@ The current phase must agree with the surrounding state.
 
 Examples:
 
-### `playing`
+### `action-phase`
 
 - Active player exists
 - Active player hand may be visible
+- Action Phase is open
 - No unresolved forced discard exists
 
-### `forced-discard-after-draw`
+### `forced-discard-after-action`
 
 - Active player's hand exceeds current hand limit
 - Required discard count is greater than zero
+- A completed Action effect caused the temporary overage
+- Normal actions are unavailable until discard resolves
 
 ### `forced-discard-before-skip`
 
@@ -348,8 +431,8 @@ Examples:
 
 ### `sudden-death`
 
-- Infinity Beast is active
-- Black Hole is removed from play
+- Dedicated Sudden Death Monster is active
+- Ultimate Weapon is removed from play
 - Hand limit is 4
 
 ### `game-over`
@@ -376,19 +459,64 @@ Exceptions are valid only during explicit forced-discard phases.
 
 Example:
 
-A player may temporarily have 6 cards after Draw 2 if the game phase is:
+A player may temporarily have 6 cards after playing Draw 2 if the game phase is:
 
 ```ts
-'forced-discard-after-draw'
+'forced-discard-after-action'
 ```
 
 That is a legal transient state.
 
-A player with 6 cards during normal `playing` state is not legal.
+A player with 6 cards during normal Action Phase with no pending discard is not legal.
 
 ---
 
-# 10. Beatable-Monster Presets
+# 10. Action-Chain Preset
+
+Create a deterministic helper:
+
+```ts
+buildActionChain(state)
+```
+
+Example setup:
+
+- Current player has Draw 2
+- Draw pile is arranged so Draw 2 yields Draw 1 plus another card
+- Hand is within a legal starting size
+
+Expected flow:
+
+1. Player plays Draw 2.
+2. Draw 2 resolves.
+3. Newly drawn Draw 1 is in hand.
+4. If forced discard is required, resolve it.
+5. Action Phase remains open.
+6. Draw 1 is legally playable.
+
+This preset should test the generic Action system rather than special-case UI behavior.
+
+---
+
+# 11. Action-Timing Preset
+
+Create a preset in which:
+
+- Current player begins with a legal Action and the Weapons needed for a Monster
+- Action Phase starts open
+- Weapon play begins
+
+Expected:
+
+- Action is legal before Weapon play begins
+- Action Phase closes when Weapon / Ultimate Weapon play begins
+- The same Action becomes illegal afterward
+
+This guards the "Actions before Weapons" rule.
+
+---
+
+# 12. Beatable-Monster Presets
 
 A helper should make a selected Monster definitely beatable.
 
@@ -428,7 +556,7 @@ expect(
 
 ---
 
-# 11. Unbeatable-Monster Presets
+# 13. Unbeatable-Monster Presets
 
 A helper should guarantee the selected player is missing at least one required Weapon.
 
@@ -460,17 +588,15 @@ expect(
 
 ---
 
-# 12. Draw-Pile Recycle Presets
+# 14. Draw-Pile Recycle Presets
 
 Support at least two presets.
-
----
 
 ## Recycle With Monster Rotation
 
 Set up:
 
-- Shared draw pile empty or one draw away from empty
+- Shared Draw pile empty or one draw away from empty
 - Shared discard pile contains cards
 - At least 4 undefeated regular Monsters remain
 - 2 Monsters are currently face-up
@@ -479,26 +605,24 @@ Expected:
 
 - Face-up Monsters rotate to bottom
 - Replacement Monsters appear
-- Discard pile becomes new shuffled draw pile
-
----
+- Discard pile becomes new shuffled Draw pile
 
 ## Recycle Without Monster Rotation
 
 Set up:
 
-- Shared draw pile empty or one draw away from empty
+- Shared Draw pile empty or one draw away from empty
 - Shared discard pile contains cards
 - Fewer than 4 undefeated Monsters remain
 
 Expected:
 
 - Face-up Monsters stay
-- Discard pile becomes new shuffled draw pile
+- Discard pile becomes new shuffled Draw pile
 
 ---
 
-# 13. Final-Three Preset
+# 15. Final-Three Preset
 
 Create a deterministic helper:
 
@@ -513,11 +637,13 @@ Expected result:
 - Monster deck contains no additional undefeated regular Monsters
 - Defeated piles account for the other 14 regular Monsters
 
-This state must pass monster-conservation validation.
+This state must pass Monster-conservation validation.
+
+The preset should not depend on a particular point-value distribution.
 
 ---
 
-# 14. Tie Preset
+# 16. Tie Preset
 
 Create:
 
@@ -528,16 +654,22 @@ forceTie(state)
 This should construct a valid end-of-regular-game state where:
 
 - All regular Monsters are defeated
-- Both players have equal scores
-- Each player has 12 points
-- Both players are tied for highest score
+- Both players have equal highest scores
 - Sudden Death has not yet started unless requested
 
-The helper should use real Monster point totals, not directly fake numeric score fields if score is derived from defeated Monsters.
+For the current core set, a convenient tie is:
+
+```text
+12–12
+```
+
+However, the helper should derive a valid tie from the active Monster definitions where possible rather than assume every future 17-Monster mix totals 24 points.
+
+Do not directly fake numeric score fields if score is derived from defeated Monsters.
 
 ---
 
-# 15. Sudden Death Preset
+# 17. Sudden Death Preset
 
 Create:
 
@@ -548,10 +680,15 @@ prepareSuddenDeath(state)
 Expected:
 
 - Valid tied score condition
-- Infinity Beast active
-- Black Hole removed from all playable zones
+- Dedicated Sudden Death Monster active
+- Ultimate Weapon removed from all playable zones
 - Current hand limit = 4
 - Players above 4 resolved or explicitly placed into required setup discard
+- Normal Action Phase rules remain available
+
+For the core set:
+
+- Sudden Death Monster is The Infinity Beast
 - Infinity Beast requires:
 	- Grenade
 	- Sword
@@ -561,7 +698,7 @@ The helper should produce a state from which Sudden Death can be played normally
 
 ---
 
-# 16. Suggested Sandbox Presets
+# 18. Suggested Sandbox Presets
 
 The UI can expose named presets:
 
@@ -570,12 +707,16 @@ export type SandboxPreset =
 	| 'fresh-game'
 	| 'hand-limit-skip'
 	| 'draw-2-over-limit'
+	| 'action-chain'
+	| 'action-timing-lock'
 	| 'ground-worm-beatable'
 	| 'thing-beatable'
+	| 'ultimate-weapon-ready'
 	| 'black-hole-ready'
 	| 'recycle-with-rotation'
 	| 'recycle-without-rotation'
 	| 'final-three'
+	| 'alternate-monster-mix'
 	| 'score-tie'
 	| 'sudden-death'
 	| 'infinity-beast-beatable';
@@ -585,7 +726,7 @@ These are much faster than repeatedly manipulating individual controls.
 
 ---
 
-# 17. Testing Builders
+# 19. Testing Builders
 
 Every legal builder should have tests.
 
@@ -627,9 +768,11 @@ describe('makeMonsterBeatable', () => {
 });
 ```
 
+Action presets should receive equivalent coverage.
+
 ---
 
-# 18. Global Sandbox Test
+# 20. Global Sandbox Test
 
 A powerful regression test is to validate every preset.
 
@@ -656,7 +799,7 @@ If a new rule makes an old preset invalid, the test fails immediately.
 
 ---
 
-# 19. Development Assertions
+# 21. Development Assertions
 
 In development builds, consider validating state after every game action.
 
@@ -681,15 +824,16 @@ Do not run expensive exhaustive validation unnecessarily in production.
 
 ---
 
-# 20. Persistence Validation
+# 22. Persistence Validation
 
 When restoring a saved game:
 
 1. Parse stored JSON.
 2. Check schema version.
 3. Run any required migration.
-4. Run `validateGameState`.
-5. Only resume if the result is safe.
+4. Verify all referenced card and Monster definition IDs exist.
+5. Run `validateGameState`.
+6. Only resume if the result is safe.
 
 If invalid:
 
@@ -697,13 +841,15 @@ If invalid:
 - Do not crash the app
 - Offer starting a new game
 
+This becomes important when future expansions add or remove available definitions.
+
 ---
 
-# 21. Future Multiplayer Value
+# 23. Future Multiplayer Value
 
 This work is intentionally useful beyond local development.
 
-When online lobbies are added, the server can:
+When live Online Tables are added, the server can:
 
 1. Receive a `GameAction`
 2. Validate that the player may perform it
@@ -717,11 +863,12 @@ The same core validation code can therefore protect:
 - local games
 - tests
 - saved games
+- expansion content
 - online multiplayer
 
 ---
 
-# 22. Definition of Done
+# 24. Definition of Done
 
 The sandbox/validation milestone is complete when:
 
@@ -730,8 +877,12 @@ The sandbox/validation milestone is complete when:
 - [ ] Named presets cover important edge cases
 - [ ] `validateGameState()` exists
 - [ ] Card-instance uniqueness is validated
-- [ ] Shared deck conservation is validated
-- [ ] Monster conservation is validated
+- [ ] Standard 18 / 5 / 1 player-card category totals are validated
+- [ ] Total player-card conservation is validated
+- [ ] 17-regular-Monster conservation is validated
+- [ ] Monster point distribution is not incorrectly hard-coded
+- [ ] Action Phase timing is validated
+- [ ] Action chaining is validated
 - [ ] Phase invariants are validated
 - [ ] Hand-limit transient states are validated
 - [ ] Every legal preset passes validation

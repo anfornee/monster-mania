@@ -1,187 +1,180 @@
 # Monster Mania — Product Roadmap
 
-> This is directional, not a promise of dates.
+> This is directional, not a promise of dates. The current priority is a complete Solo Game and an honest Online Table skeleton.
 
----
+## Phase 1 — Rules foundation
 
-# Phase 1 — Local Desktop V1
+- deterministic, React-independent engine
+- data-driven card and Monster definitions
+- generic Action and Ultimate Weapon effects
+- seedable setup and shuffling
+- explicit actions and JSON-compatible state
+- central state validator
+- unit tests for complete normal play and Sudden Death
+- expansion-regression fixtures
+- permanent Rules Sandbox
 
-Primary target.
+The standard format remains 18 Weapons, 5 Actions, 1 Ultimate Weapon, 17 regular Monsters, and 1 separate Sudden Death Monster. The engine must not assume the core set's point-value distribution.
 
-- 2-player local pass-and-play
-- Desktop-first
-- Complete rules
-- Physical-card visual identity
-- Private hand handoff
-- Save/resume
-- Defeated Monster piles
-- Rules sandbox
-- Sudden Death
-- Basic audio hooks
+## Phase 2 — Playable Solo Game
 
----
+Primary playable MVP target:
 
-# Phase 2 — Mobile / Responsive Layout
+- one human and one computer participant
+- shared rules and action pipeline
+- deterministic, replaceable computer strategy
+- complete board and contextual controls
+- hidden computer hand
+- forced discard, deck recycling, final three, scoring, and Sudden Death
+- defeated-Monster inspection
+- local save/resume with validation
+- desktop-first presentation with responsive safety
+- keyboard and screen-reader-friendly interaction
 
-Once desktop gameplay is stable:
+The computer controller chooses actions; it never changes state directly or owns a separate version of the rules.
 
-- Responsive board
-- Touch-friendly hand
-- Card inspection
-- Horizontal hand scrolling/fanning
-- Portrait and landscape consideration
-- Better turn handoff on phones/tablets
-- PWA exploration
+## Phase 3 — Online Table skeleton
 
-Do not change core rules engine for mobile.
+Establish the product and integration seam without pretending that live multiplayer exists:
 
-This should be primarily a presentation milestone.
+- **Create Table** entry point
+- **Join Table** form and normalized short-code input
+- waiting, disconnected, unavailable, and error states
+- transport-neutral Table commands and events
+- player-filtered state/view contract
+- in-memory authoritative service with two seats and opaque seat tokens
+- server-side membership, turn, action, result-state, and privacy checks
+- replaceable Table client interface
+- documentation for backend implementation
 
----
+There is no HTTP/WebSocket listener, browser connection client, database, process-restart recovery, realtime broadcast, or durable reconnect in this phase. The in-memory service is authoritative within one process, but it is not reachable cross-device and must not be presented as live online play.
 
-# Phase 3 — Custom Online Lobbies
+## Phase 4 — Functional Online Tables
 
-Goal:
+Goal: two people play from separate browsers/devices in a private Table using the same game engine as Solo.
 
-Allow 2 players on separate devices to create and join private games.
+### Transport adapter around the authoritative service
 
-Example:
+The Table service owns complete `GameState`. Add a server transport that lets clients submit a `GameAction`, never a modified state.
 
-```text
-Monster Mania
+For each request, the service:
 
-[ Create Game ]
+1. authenticates or resolves a seat token
+2. confirms the participant belongs to the Table
+3. verifies turn ownership when required
+4. applies the action through the shared rules engine
+5. validates the resulting state
+6. commits the accepted state once
+7. produces a separately filtered view for each participant
+8. broadcasts the appropriate update
 
-Join Game
-[ M 7 K 4 Q 2 ]
+### Table lifecycle
 
-[ Join ]
-```
+- create a private two-seat Table
+- return a short, readable, collision-checked code
+- let the second participant join
+- reject a third participant
+- start only when both seats are present
+- define expiration and cleanup behavior
+- maintain an opaque seat/session token separate from the public Table code
 
-## Basic Lobby Features
+### Privacy boundary
 
-- Create lobby
-- Short join code
-- Enter player name
-- Second player joins
-- Host starts match
-- Two-player maximum
-- Private lobby only
-- No public matchmaking required
-
----
-
-## Recommended Architecture
-
-By this point, move authoritative `GameState` to a backend/server.
-
-Clients send:
-
-```ts
-GameAction
-```
-
-Server:
-
-1. validates player identity
-2. validates action
-3. runs the same game rules engine
-4. updates state
-5. broadcasts filtered state
-
-The game rules package should ideally remain shared between client and server.
-
----
-
-## Privacy
-
-Server should not send both hands to both clients.
-
-Possible shape:
+The service can store the full state, but each response includes only:
 
 ```ts
-interface ClientGameState {
-	publicState: PublicGameState;
-	myHand: PlayerCardInstance[];
+interface PlayerGameView {
+	publicState: PublicGameState
+	myHand: PlayerCardInstance[]
+	opponentHandCount: number
 }
 ```
 
-The opponent hand can be represented by:
+The exact type may evolve. The invariant may not: one browser must never receive the other participant's hand identities.
 
-```ts
-opponentHandCount: number;
-```
+### Transport and storage decision
 
----
+Choose the backend only when beginning this phase. A small TypeScript WebSocket or Socket.IO service with in-memory Tables is acceptable for an initial deployment if process-restart loss is clearly documented. A hosted database/realtime provider is also reasonable when it reduces operating work.
 
-# Phase 4 — Online Match Quality
+Evaluate options against:
 
-After basic lobbies work:
-
-- Reconnect after refresh/network loss
-- Resume abandoned connection
-- Host controls
-- Rematch button
-- Lobby expiration
-- Clear disconnect status
-- Game-state versioning
-- Better server validation
-- Rate limiting / basic abuse protection
-
----
-
-# Phase 5 — Optional Expansion Features
-
-Only build if they sound fun.
-
-Possible:
-
-- AI opponent
-- Spectator mode
-- Alternate rule variants
-- Additional Monster packs
-- Additional Weapons
-- Custom card backs
-- Match history
-- Player profiles
-- Achievement-like stats
-- Full sound effects
-- Music
-- Animated cards
-- Public matchmaking
-- Seasonal content
-
----
-
-# Multiplayer Technology Notes
-
-Do not choose a multiplayer backend during local v1 unless needed.
-
-Reasonable future categories include:
-
-- Firebase / Firestore
-- Supabase Realtime
-- WebSocket server
-- Socket.IO
-- Serverless durable-room platform
-
-The exact choice should be made when Phase 3 starts based on:
-
-- hosting preference
-- expected scale
-- cost
-- authentication needs
+- deployment and hosting fit
+- atomic action updates/concurrency control
+- realtime fan-out
+- Table expiration
+- authentication or anonymous seat tokens
 - reconnect requirements
-- deployment comfort
+- cost and expected scale
+- ability to share engine code safely
 
-The current rules/action architecture should keep this decision flexible.
+Do not let a provider's internal term "room" leak into product copy; players join a Table.
 
----
+### Reconnect and ordering
 
-# Guiding Rule
+- reconnect with the same opaque seat token where possible
+- resend the latest filtered view after reconnect
+- include a monotonic revision/action number
+- reject or safely retry stale/duplicate actions
+- show opponent disconnect state without leaking private information
 
-The roadmap should never make local v1 harder than it needs to be.
+### Required service tests
 
-Build the good local game first.
+- create and join
+- third participant rejected
+- invalid/expired code rejected
+- non-member action rejected
+- out-of-turn and illegal action rejected
+- separate Tables isolated
+- accepted action synchronized
+- simultaneous action conflict handled once
+- reconnect restores the same seat
+- opponent hand absent from all client payloads
 
-Then make the same game available across two devices.
+Online play is complete only after a full two-browser match, forced discard, Action chain, Black Hole, final three, and Sudden Death have been exercised against the authoritative service.
+
+## Phase 5 — Online match quality
+
+- durable Table persistence where needed
+- clearer reconnect and abandonment handling
+- host controls and rematch
+- rate limiting and basic abuse protection
+- structured operational logging
+- protocol and state migrations
+- deployment health checks and monitoring
+
+## Phase 6 — Layered card assets and responsive polish
+
+The current MVP uses flattened complete-card JPGs. To make visual card content fully data-driven, export and integrate separate:
+
+- frames/templates
+- Monster and item artwork
+- requirement icons
+- names, type labels, lore/rules text, and point medallions
+
+Then add richer responsive layouts, touch-friendly hand handling, card inspection, portrait/landscape refinement, and optional PWA support without changing the rules engine.
+
+## Phase 7 — Expansion packs and setup
+
+- additional Monster, Action, Weapon, Ultimate Weapon, and Sudden Death definitions
+- content-pack selection
+- curated mixes that satisfy standard category totals
+- validation for explicitly documented variants
+- synthetic and real expansion regression tests
+
+Avoid a collectible deck-builder until the product actually needs one.
+
+## Optional later work
+
+- improved AI strategies
+- spectator mode
+- public matchmaking
+- alternate rule variants
+- match history and player profiles
+- achievements/statistics
+- full sound and music
+- richer card/Monster animation
+- custom card backs and seasonal content
+
+## Guiding rule
+
+Finish and protect the Solo game first. Keep the Online Table skeleton explicit and replaceable. Add real multiplayer only behind an authoritative, privacy-preserving service that reuses the tested engine.

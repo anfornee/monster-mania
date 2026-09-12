@@ -1,459 +1,178 @@
 # Monster Mania — Project Overview
 
-> **Status:** Current source of truth for implementation direction  
-> **Stack:** Vite + React + TypeScript  
-> **Initial target:** 2-player local pass-and-play, desktop-first  
-> **Later:** Mobile layout, custom online lobbies, reconnect/resume, rematch flow
+> **Status:** Current source of truth for product and architecture direction
+>
+> **Stack:** Vite + React + TypeScript
+>
+> **MVP direction:** playable Solo Game plus an Online Table skeleton
+>
+> **Later:** authoritative two-browser Tables, persistence, reconnect, responsive polish, and expansion content
 
----
+## 1. Product goal
 
-## 1. Product Goal
+Monster Mania is a digital adaptation of the original tabletop card game. It should preserve the established cards, rules, visual identity, and sense of discovery while keeping the implementation small enough to reason about.
 
-Monster Mania is a digital adaptation of the original tabletop card game.
+The rules engine is the center of the application. It must be deterministic, testable without React, and data-driven enough that future cards can be introduced without rewriting the normal turn flow.
 
-The first release should feel like the physical game brought directly into the browser:
+## 2. MVP scope
 
-- Same card art direction
-- Same card frames
-- Same weapon icons
-- Same rules
-- Same sense of discovery and tabletop play
+### Solo Game
 
-The first version should be intentionally small, polished, and easy to reason about.
+The playable MVP mode has exactly two participants:
 
----
+- one local human
+- one computer-controlled opponent
+- complete normal-game rules and Sudden Death
+- the computer choosing only legal actions through the same engine API as a human
+- hidden computer hand in the normal UI
+- local, versioned save/resume
 
-## 2. V1 Scope
+The first computer strategy can be simple and deterministic: play useful Draw Actions, prefer the highest-point normally beatable Monster, save the Ultimate Weapon when a normal defeat is available, use it on the highest-value eligible target otherwise, and skip when no defeat is available.
 
-### Included
+### Online Table skeleton
 
-- 2 players
-- One device
-- Local pass-and-play
-- Desktop-first layout
-- Private hands through turn handoff screens
-- Complete normal-game rules
-- Draw 1 / Draw 2 cards
-- Black Hole
-- Monster rotation when the draw deck recycles
-- Final-three-monster behavior
-- Scoring
-- Sudden Death
-- The Infinity Beast
-- Defeated-monster piles
-- Game event log
-- Local game persistence
-- Basic audio architecture/hooks
+The MVP also establishes product language and boundaries for a future private **Online Table**:
 
-### Not Included in V1
+- create Table
+- display a short Table code
+- join Table form
+- waiting/connection states
+- transport-neutral request, response, and player-view types
+- an in-memory authoritative Table service with two seats and opaque seat tokens
+- action, membership, turn, post-state, and private-view validation at the service boundary
 
-- Online multiplayer
-- Public matchmaking
-- AI opponents
-- Accounts
-- Cloud saves
-- Mobile-first layout
-- Spectators
-- Card collection / progression system
-- Full sound design
-- Animated monster characters
+This skeleton is not live multiplayer. There is currently no HTTP/WebSocket listener, browser connection client, database, account system, process-restart recovery, cross-device synchronization, or durable reconnect support. The in-memory service is the backend seam a later transport will call. UI copy must say **Table**, never Room.
 
----
+### Not in the current playable MVP
 
-## 3. Core Technical Principles
+- local pass-and-play
+- working two-browser Online Table matches
+- public matchmaking
+- accounts or cloud saves
+- spectators
+- sophisticated AI
+- expansion-selection UI or custom deck building
+- full animation and sound production
+
+## 3. Standard game format
+
+The engine treats the standard format as category-based rather than hard-coding the current named cards.
+
+```text
+Shared player Draw deck
+18 Weapon cards
+5 Action cards
+1 Ultimate Weapon card
+= 24 player cards
+
+Monster deck
+17 regular Monster cards
+
+Sudden Death
+1 dedicated Sudden Death Monster
+```
+
+The core set currently fills those categories with three copies each of Bow, Grenade, Mace, Sword, Spear, and Gun; three Draw 1 cards; two Draw 2 cards; one Black Hole; 17 regular Monsters; and The Infinity Beast.
+
+The exact number of 1-, 2-, and 3-point Monsters is not an engine invariant. A future legal set may use a different distribution while retaining 17 regular Monsters.
+
+## 4. Architecture
+
+```text
+Solo UI / computer --------> GameAction --------> deterministic engine
+future network transport --> Table service -----> deterministic engine
+                                                    |    |       |
+                                             definitions selectors validator
+                                                    |
+                                             serializable state
+```
 
 ### Rules are separate from React
 
-React should render game state and dispatch actions.
-
-React components should **not** contain authoritative game rules.
-
-Prefer:
+React renders a player-appropriate view of state and dispatches actions. Components do not decide whether an Action is playable, which Weapons defeat a Monster, how forced discard works, or when Sudden Death starts.
 
 ```ts
-const nextState = applyGameAction(state, action);
+const result = applyGameAction(state, action, catalog)
 ```
 
-instead of embedding rule logic inside button handlers.
+### One engine for every controller
 
----
+A participant and its controller are separate concepts. A local human, remote human, or computer submits the same `GameAction`; the engine enforces the same rules for all of them. AI strategy stays outside the engine and must never directly mutate `GameState`.
 
-### Game state must be serializable
+### Serializable state
 
-`GameState` should contain plain JSON-compatible values.
+`GameState` contains plain JSON-compatible values. This supports deterministic tests, local persistence, debugging, eventual authoritative multiplayer, reconnect, and possible replay tooling.
 
-This enables:
+Do not store React elements, functions, class instances, DOM nodes, or browser-only objects in authoritative state.
 
-- localStorage persistence
-- deterministic tests
-- replay/debug tools
-- future server-authoritative multiplayer
-- reconnect/resume later
+### Explicit actions
 
-Avoid storing:
+All mutations enter through typed actions such as playing an Action card, defeating a Monster, using an Ultimate Weapon, resolving a discard, or skipping. Card effects are driven by definitions and generic categories rather than scattered card-name conditionals.
 
-- DOM nodes
-- React elements
-- class instances
-- functions
-- browser-only objects
+## 5. Current project boundaries
 
-inside game state.
+```text
+src/game/definitions/    core catalog and stable definitions
+src/game/engine/         game creation, action application, RNG, types, validation
+src/game/selectors/      scores, legal moves, and derived view data
+src/game/ai/             replaceable computer strategy (MVP milestone)
+src/game/serialization/  schema-versioned local game storage
+src/game/network/        Online Table protocol, private views, codes, and in-memory service
+src/game/sandbox/        deterministic scenario builders
+src/components/          React presentation as the board is built
+public/assets/           browser-served card and branding assets
+assets/cards/            source copies of current complete-card art
+docs/                    rules, implementation, testing, roadmap, and design guidance
+```
 
----
+Some destination directories are introduced by later milestones. Their responsibilities should remain separate when implemented.
 
-### Think in terms of actions
+## 6. Public and private information
 
-The game engine should accept explicit player/system actions.
+Solo can keep both hands in one trusted local state, but the normal UI exposes only the human player's hand. The computer hand is represented by a count or card backs.
 
-Example:
+A real Online Table must be stricter. The authoritative service may hold the full state, but each client receives only its own hand plus public information and the opponent's hand count. Hiding an already-delivered opponent hand with CSS is not privacy.
+
+Conceptually:
 
 ```ts
-export type GameAction =
-	| { type: 'START_GAME'; startingPlayerId?: string }
-	| { type: 'REVEAL_HAND'; playerId: string }
-	| { type: 'PLAY_DRAW_CARD'; playerId: string; cardInstanceId: string }
-	| { type: 'DEFEAT_MONSTER'; playerId: string; monsterId: string }
-	| { type: 'USE_BLACK_HOLE'; playerId: string; monsterId: string }
-	| { type: 'SELECT_DISCARD'; playerId: string; cardInstanceId: string }
-	| { type: 'CONFIRM_DISCARD'; playerId: string }
-	| { type: 'SKIP_TURN'; playerId: string }
-	| { type: 'ADVANCE_TURN' };
-```
-
-This action-based structure is intentionally compatible with future network play.
-
----
-
-## 4. Public vs Private State
-
-Even in local play, treat player hands as conceptually private.
-
-### Public State
-
-Examples:
-
-- Current player
-- Face-up monsters
-- Monster deck count
-- Draw pile count
-- Scores
-- Defeated-monster pile counts
-- Current phase
-- Event log
-- Winner
-
-### Private State
-
-Examples:
-
-- Player 1 hand
-- Player 2 hand
-
-For local play, the browser holds all state.
-
-For future online multiplayer, the server can filter what each player is allowed to receive.
-
-Design components so they do not casually depend on another player's hand.
-
----
-
-## 5. Pass-and-Play Experience
-
-At the end of Player 1's turn:
-
-1. Hide Player 1's hand.
-2. Show a handoff screen.
-3. Prompt Player 2 to take control of the device.
-4. Player 2 clicks **Reveal Hand**.
-5. Player 2's hand becomes visible.
-6. Play continues.
-
-Example:
-
-```text
-Player 2's Turn
-
-Make sure Player 2 is ready before revealing their hand.
-
-[ Reveal Hand ]
-```
-
-This keeps private information private while preserving a tabletop feel.
-
----
-
-## 6. Asset Strategy
-
-Final cards should **not** be flattened into one image.
-
-The app should compose cards from:
-
-- Card template
-- Monster/weapon artwork
-- Weapon icons
-- Card name
-- Point value
-- Type label
-- Lore text
-
-This is a locked production decision.
-
-### Required assets
-
-```text
-src/assets/
-	cards/
-		templates/
-			monster-card-template.png
-			weapon-card-template.png
-			card-back.png
-
-		monsters/
-			socket.png
-			top.png
-			bitty-bitey.png
-			...
-
-		weapons/
-			bow-icon.png
-			grenade-icon.png
-			mace-icon.png
-			sword-icon.png
-			spear-icon.png
-			gun-icon.png
-			blackhole-icon.png
-
-	branding/
-		monster-mania-logo.png
-```
-
-Monster artwork should ideally be exported without:
-
-- frame
-- text
-- point medallion
-- lore
-- weapon requirement icons
-
----
-
-## 7. Recommended Project Structure
-
-```text
-src/
-	assets/
-
-	components/
-		cards/
-			MonsterCard.tsx
-			WeaponCard.tsx
-			CardBack.tsx
-			WeaponIcon.tsx
-
-		game/
-			GameBoard.tsx
-			MonsterRow.tsx
-			PlayerArea.tsx
-			PlayerHand.tsx
-			DefeatedPile.tsx
-			TurnHandoff.tsx
-			TurnControls.tsx
-			DiscardFlow.tsx
-			EventLog.tsx
-			SuddenDeathBanner.tsx
-
-	data/
-		monsters.ts
-		playerCards.ts
-		weapons.ts
-
-	game/
-		actions.ts
-		createGame.ts
-		reducer.ts
-		rules.ts
-		selectors.ts
-		serialization.ts
-		types.ts
-
-	dev/
-		RulesSandbox.tsx
-
-	styles/
-		tokens.css
-		globals.css
-
-	App.tsx
-	main.tsx
-```
-
----
-
-## 8. State Management
-
-Do not add a large state-management dependency until it is useful.
-
-Recommended progression:
-
-### Initial
-
-- `useReducer`
-- Pure game reducer
-- React context if needed
-
-### Later
-
-If UI complexity grows:
-
-- Zustand is a reasonable lightweight choice.
-
-The important requirement is that the **game reducer remains independent** of whichever state library hosts it.
-
----
-
-## 9. Persistence
-
-For local v1:
-
-- Save active game state to `localStorage`
-- Restore after refresh
-- Include a schema version
-
-Example:
-
-```ts
-interface StoredGame {
-	version: 1;
-	state: GameState;
-	savedAt: string;
+interface PlayerGameView {
+	publicState: PublicGameState
+	myHand: PlayerCardInstance[]
+	opponentHandCount: number
 }
 ```
 
-Do not silently load incompatible future versions.
+## 7. Persistence
 
----
+Solo save/resume uses `localStorage`, a schema version, stable definition IDs, and state validation during restore. Incompatible or invalid saves fail safely rather than crashing or entering an impossible game state.
 
-## 10. Game Event Log
+Online Table persistence is a different boundary. The in-memory Table service owns authoritative state for its process, but loses every Table on restart. A future repository/storage adapter must provide durable state and concurrency control; client `localStorage` is not an online source of truth.
 
-Keep a small structured event history.
+## 8. Assets
 
-Examples:
+The available MVP art under `public/assets/cards/` is primarily flattened, complete-card JPGs, plus a PNG card back and logo. The current catalog points directly at those files.
 
-```ts
-type GameEvent =
-	| { type: 'TURN_STARTED'; playerId: string }
-	| { type: 'CARD_DRAWN'; playerId: string; count: number }
-	| { type: 'MONSTER_DEFEATED'; playerId: string; monsterId: string }
-	| { type: 'PLAYER_SKIPPED'; playerId: string }
-	| { type: 'DRAW_DECK_RECYCLED' }
-	| { type: 'MONSTERS_ROTATED' }
-	| { type: 'SUDDEN_DEATH_STARTED' };
-```
+This is a real limitation: the app cannot independently update embedded card names, rules text, frame details, point medallions, or requirement icons inside those JPGs. Use the complete cards for the MVP. A later asset pass can export separate frames, artwork, icons, and typography for fully data-driven card composition; do not claim that layered rendering is already available.
 
-This is useful for:
+## 9. Rules Sandbox
 
-- player clarity
-- debugging
-- automated tests
-- possible future replays
+`/dev/rules` is the permanent development utility for deterministic edge cases. Its legal presets are built through testable helpers and pass `validateGameState()`. See `05-rules-sandbox-and-state-validation.md` for the preset and validation contract.
 
----
+The sandbox is development tooling, not a second rules implementation.
 
-## 11. Audio Architecture
+## 10. Accessibility and presentation
 
-Sound is not a v1 priority, but add a small abstraction so effects can be added later.
+The board must provide keyboard-operable semantic controls, visible focus, useful labels, non-color interaction states, appropriate status announcements, readable contrast, dialog focus management, and reduced-motion behavior. Online connection/waiting errors and unavailable actions should be explained in text.
 
-Example:
+Desktop remains the first presentation target, with responsive safety rather than a separate mobile rules flow.
 
-```ts
-export type SoundId =
-	| 'card-draw'
-	| 'monster-defeat'
-	| 'black-hole'
-	| 'turn-change'
-	| 'sudden-death';
+## 11. Development principles
 
-export interface AudioService {
-	play(sound: SoundId): void;
-	setMuted(muted: boolean): void;
-}
-```
-
-The default implementation can initially do nothing.
-
----
-
-## 12. Desktop Layout Direction
-
-Rough hierarchy:
-
-```text
-┌────────────────────────────────────────────────────┐
-│ Monster Mania              P1: 3 pts   P2: 2 pts  │
-├────────────────────────────────────────────────────┤
-│                                                    │
-│         [ MONSTER ]       [ MONSTER ]              │
-│                                                    │
-│             Monster deck: 11                       │
-├────────────────────────────────────────────────────┤
-│ Player 1                                           │
-│ [card] [card] [card] [card] [card]                │
-│                                                    │
-│                     [ Skip Turn ]                   │
-├────────────────────────────────────────────────────┤
-│ Draw: 9   Discard: 10   Turn 7   Event log         │
-└────────────────────────────────────────────────────┘
-```
-
-Priority:
-
-1. Face-up monsters
-2. Current player's hand
-3. Scores / turn
-4. Contextual actions
-5. Deck counts / logs / secondary information
-
----
-
-## 13. Defeated Monster Piles
-
-Defeated monsters should not remain permanently spread across the board.
-
-Each player gets a compact pile.
-
-Example:
-
-```text
-Player 1
-3 pts
-[ 2 defeated ]
-```
-
-Clicking it expands a tray/modal containing the defeated cards.
-
-The shared player-card discard pile is **not inspectable**.
-
----
-
-## 14. Development Philosophy
-
-Prefer:
-
-- Small files
-- Explicit state transitions
-- Pure rules functions
-- Strong TypeScript types
-- Tests for gameplay rules
-- Data-driven cards
-- Reusable visual components
-
-Avoid:
-
-- Rule logic hidden in UI components
-- Storing whole card definitions repeatedly in state
-- Large abstractions before the game works
-- Building online multiplayer during v1
-- Building mobile layout before desktop play is solid
-
-The goal is to make the simplest version that is already architecturally ready to grow.
+- Prefer pure rules functions, explicit transitions, stable IDs, and small focused modules.
+- Keep definitions, rules, selectors, AI, persistence, networking, and React presentation separate.
+- Validate state after actions in tests and development paths.
+- Test behavior and invariants rather than only rendered output.
+- Add cards through definitions and generic effects.
+- Keep Online Table types transport-neutral until a backend is deliberately selected.
+- Do not label online play complete until two clients can use an authoritative service without receiving each other's private hands.

@@ -1,514 +1,183 @@
-# Monster Mania — V1 Development Plan
+# Monster Mania — MVP Development Plan
 
-> **Goal:** Deliver a polished, complete 2-player local desktop game before mobile or online multiplayer.
+> **Goal:** deliver a trustworthy, playable Solo Game and a clearly bounded Online Table skeleton. Live network play follows after an authoritative backend is selected and implemented.
 
----
+## Milestone 0 — Repository and architecture
 
-# Stage 0 — Repository Foundation
+Establish the shared contracts before building controllers or screens.
 
-## Goals
+- Vite, React, TypeScript, ESLint, and Vitest
+- authoritative rules and product documentation
+- root `AGENTS.md`
+- stable card and Monster definitions
+- JSON-compatible `GameState`
+- explicit `GameAction` union
+- seedable random behavior
+- clear boundaries for engine, selectors, AI, serialization, networking, and React
+- production assets under `public/assets/`
 
-Establish the project and source-of-truth structure before gameplay work.
+Deliverable: the repository boots, card definitions load, and future modules have one documented architecture.
 
-## Tasks
+## Milestone 1 — Rules engine, validator, and tests
 
-- Create Vite + React + TypeScript app
-- Enable strict TypeScript
-- Add ESLint / formatting conventions
-- Add Vitest
-- Create `/docs`
-- Add visual design guide
-- Add rules source of truth
-- Create asset directories
-- Add design tokens
-- Add Monster Mania logo
-- Add card templates
-- Add weapon icons
+Complete the game without depending on the final board UI.
 
-## Deliverable
+The engine must cover:
 
-The app boots to a minimal Monster Mania shell with no gameplay yet.
+- standard 24-card player deck: 18 Weapons, 5 Actions, 1 Ultimate Weapon
+- 17 regular Monsters plus a separate Sudden Death Monster
+- starting hands and face-up Monsters
+- generic Action effects and Action chaining
+- Action timing lock after Monster-defeat play begins
+- full draw before forced discard
+- skip below and at the hand limit
+- exact Weapon requirements and consumption
+- one Monster maximum per turn
+- generic Ultimate Weapon infrastructure and core Black Hole behavior
+- replacement, final-three behavior, and Draw-deck recycling
+- Monster rotation only when four or more undefeated regular Monsters remain
+- derived scoring, normal victory, ties, and Sudden Death
+- Infinity Beast victory
 
----
+`validateGameState()` must detect duplicated, missing, unknown, or illegally located cards and Monsters; invalid phases, players, hand limits, and Sudden Death state; and violations of standard category totals. It must not enforce the current core point-value distribution.
 
-# Stage 1 — Data Model + Asset Registry
+Tests must also register a synthetic Action definition and a legal alternate 17-Monster distribution to prove the engine is data-driven.
 
-## Goals
+Deliverable: a complete game can be driven through `GameAction`s in tests, and every accepted transition produces valid state.
 
-Represent every card and Monster as data.
+## Milestone 2 — Rules Sandbox and card presentation
 
-## Build
+Create the permanent `/dev/rules` development screen using the real engine and pure preset builders.
 
-- `WeaponId`
-- `PlayerCardDefinition`
-- `PlayerCardInstance`
-- `MonsterDefinition`
-- `PlayerState`
-- `GameState`
-- Asset registry
-- Monster data
-- Player-card deck definition
+Minimum presets:
 
-Use unique card instance IDs even when multiple cards share one definition.
+- fresh game
+- Draw 2 over the hand limit
+- Action chain
+- Action timing lock
+- beatable and unbeatable Monster
+- Black Hole ready
+- Draw-deck recycle with and without Monster rotation
+- final three
+- score tie
+- Sudden Death
+- Infinity Beast beatable
+- alternate legal Monster distribution
 
-Example:
+Legal presets must pass `validateGameState()` and have automated coverage.
 
-```ts
-interface PlayerCardInstance {
-	instanceId: string;
-	cardId: PlayerCardId;
-}
-```
+Use the supplied complete-card images for `MonsterCard`, `WeaponCard`, `ActionCard`, `UltimateWeaponCard`, and `CardBack`. Preserve semantic labels and button behavior even when the card face is an image.
 
-This avoids ambiguity when discarding one of several identical cards.
+Current limitation: most card faces are flattened JPGs. Layered templates, separate illustration, and independently rendered card text are a later asset milestone.
 
-## Deliverable
+Deliverable: developers can reproduce critical states quickly and inspect cards consistently.
 
-A development screen can render:
+## Milestone 3 — Playable Solo Game
 
-- Every Weapon icon
-- Every Monster definition
-- Every card definition
-- Counts matching the physical game
+Build the human-versus-computer mode on the shared engine.
 
----
+### Computer controller
 
-# Stage 2 — Reusable Card Components
+Keep the strategy in `src/game/ai/`, outside the engine. It returns a normal legal `GameAction` and does not mutate state.
 
-## Goals
+Initial deterministic heuristic:
 
-Rebuild the physical-card look using layered web components.
+1. Play useful Draw Actions while the Action Phase remains open.
+2. Re-evaluate after each Action so newly drawn Actions may chain.
+3. Prefer the highest-point Monster that can be defeated normally.
+4. Prefer normal Weapons to spending the Ultimate Weapon.
+5. If no normal defeat is available, use the Ultimate Weapon on the highest-point eligible regular Monster.
+6. Otherwise skip.
 
-## Components
+Automated tests must show that the strategy chooses legal actions, chains Actions, uses deterministic tie-breaking, defeats available targets, uses Black Hole only when appropriate, skips when required, and does not mutate its input.
 
-```text
-WeaponIcon
-MonsterCard
-WeaponCard
-DrawCard
-BlackHoleCard
-CardBack
-```
+### Game board
 
-## MonsterCard responsibilities
+The playable board includes:
 
-- Template frame
-- Artwork
-- Point value
-- Name
-- Type label
-- Requirement icons
-- Lore
+- Monster Mania branding
+- current participant and turn status
+- both scores
+- face-up Monsters and remaining Monster count
+- shared Draw-pile count
+- human hand
+- computer hand count/card backs, never its card faces
+- defeated-Monster counts and inspectable piles
+- contextual card and Monster actions
+- Skip control
+- forced-discard flow
+- clear important messages
+- Sudden Death presentation
 
-## Requirements
+React asks selectors/engine APIs what is legal and dispatches actions; it does not reimplement rules. Computer turns should advance clearly without long artificial delays.
 
-- No full-card flattened images required
-- Responsive within fixed aspect ratio
-- `small`, `medium`, `large` sizes
-- Correct requirement icons from real assets
+### Solo save and resume
 
-## Deliverable
+Save after accepted transitions with a schema version and timestamp. Restore only after definition lookup and state validation succeed. Starting a new game should not silently overwrite a resumable game.
 
-A card gallery page showing all game cards consistently.
+Deliverable: a complete match, including a tie and Sudden Death, can be played against the computer and resumed after refresh.
 
----
+## Milestone 4 — Online Table skeleton
 
-# Stage 3 — Core Rules Engine
-
-## Goals
-
-Implement gameplay without depending on the final board UI.
-
-## Build pure functions
-
-```ts
-createGame()
-shuffle()
-dealStartingHands()
-canDefeatMonster()
-getRequiredCardInstances()
-playDrawCard()
-beginSkip()
-selectDiscard()
-confirmDiscard()
-defeatMonster()
-useBlackHole()
-replaceMonster()
-recycleDrawDeck()
-advanceTurn()
-calculateScore()
-shouldStartSuddenDeath()
-startSuddenDeath()
-```
-
-## Phase model
-
-Recommended:
-
-```ts
-type GamePhase =
-	| 'setup'
-	| 'turn-ready'
-	| 'playing'
-	| 'forced-discard-after-draw'
-	| 'forced-discard-before-skip'
-	| 'turn-handoff'
-	| 'sudden-death-ready'
-	| 'sudden-death'
-	| 'game-over';
-```
-
-## Deliverable
-
-The game can be played from unit tests or a developer console without the final UI.
-
----
-
-# Stage 4 — Rules Sandbox
-
-## Goal
-
-Create a permanent development utility for testing edge cases quickly.
-
-Route or dev-only screen:
+Build the transport-independent product and service boundary before selecting infrastructure:
 
 ```text
-/dev/rules
+[ Play Solo ]
+[ Create Table ]
+
+Join Table
+[ _____ ] [ Join ]
 ```
 
-## Useful controls
-
-- Start fresh game
-- Select current player
-- Give player a specific card
-- Fill hand to 5
-- Set draw pile size
-- Force draw pile empty
-- Spawn specific Monsters
-- Set only 3 Monsters remaining
-- Give Black Hole
-- Force score tie
-- Start Sudden Death
-- Give Infinity Beast requirement
-- View raw serialized `GameState`
-
-## Why Keep It
-
-This will dramatically reduce debugging time.
-
-Do not delete it after launch.
-
-Hide it from production navigation if desired.
-
----
-
-# Stage 5 — Desktop Game Board
-
-## Goals
-
-Build the real 2-player local interface.
-
-## Main UI
-
-- Header
-- Player scores
-- Current player
-- Monster row
-- Monster deck count
-- Player hand
-- Draw pile count
-- Defeated pile
-- Contextual controls
-- Compact event log
-
-## Monster interaction
-
-If a Monster is beatable:
-
-- visually indicate eligibility
-- click Monster
-- show confirmation
-- apply defeat
-
-If multiple Monsters are beatable:
-
-- all valid Monsters can be selected
-
-## Deliverable
-
-A complete normal turn can be played visually.
-
----
-
-# Stage 6 — Draw + Forced Discard Flows
-
-## Draw Card Flow
-
-1. Click Draw card.
-2. Animate/resolve draw.
-3. Show complete new hand.
-4. If over hand limit:
-	- enter forced discard
-	- select enough cards
-	- confirm
-5. Resume normal turn.
-
-## Skip Flow Under Limit
-
-1. Click Skip.
-2. Draw 1.
-3. End turn.
-
-## Skip Flow At Limit
-
-1. Click Skip.
-2. Enter discard-before-skip.
-3. Select 1 card.
-4. Confirm.
-5. Draw 1.
-6. End turn.
-
-## Deliverable
-
-Hand-limit behavior exactly matches tabletop rules.
-
----
-
-# Stage 7 — Pass-and-Play Turn Handoff
-
-## Goals
-
-Protect private hands.
-
-## End-turn flow
-
-```text
-Player 1 turn ends
-→ hand disappears
-→ handoff screen
-→ Player 2 clicks Reveal Hand
-→ Player 2 begins
-```
-
-## Handoff component
-
-```tsx
-<TurnHandoff
-	nextPlayerName="Player 2"
-	onReveal={...}
-/>
-```
-
-No other player's hand should remain visible behind the overlay.
-
-## Deliverable
-
-Two people can comfortably share one desktop screen.
-
----
-
-# Stage 8 — Monster Lifecycle + Deck Recycling
-
-Implement and visually verify:
-
-- Monster replacement
-- Final-three behavior
-- Player draw deck recycling
-- Monster rotation on recycle when 4+ remain
-- No Monster rotation when fewer than 4 remain
-
-Add event log messages for these system actions.
-
-## Deliverable
-
-A full match can reach its natural ending without manual intervention.
-
----
-
-# Stage 9 — Black Hole
-
-## Requirements
-
-- Black Hole visibly looks special
-- Can target any normal Monster
-- Discards only itself
-- Ends turn after defeat
-- Does not consume normal Weapons
-- Removed before Sudden Death
-
-## Deliverable
-
-Black Hole behavior passes tests and works in UI.
-
----
-
-# Stage 10 — Scoring + Defeated Piles
-
-## Score display
-
-Always visible.
-
-## Defeated pile
-
-Compact collapsed state:
-
-```text
-[ stack ] 3 defeated
-```
-
-On click:
-
-- open tray/modal
-- show defeated Monster cards
-- close without affecting game
-
-Shared discard pile remains non-inspectable.
-
-## Deliverable
-
-Players can review their own defeated Monsters without cluttering the board.
-
----
-
-# Stage 11 — End Game + Sudden Death
-
-## Normal victory
-
-When regular Monsters are exhausted:
-
-- calculate score
-- show winner if not tied
-
-## Tie
-
-Transition to Sudden Death.
-
-### Setup
-
-- Remove Black Hole
-- Reduce hand limit to 4
-- Force discard down to 4 if necessary
-- Show special transition
-- Reveal The Infinity Beast
-
-### Play
-
-- Infinity Beast requires:
-	- Grenade
-	- Sword
-	- Gun
-
-First successful defeat wins immediately.
-
-## UI
-
-Infinity Beast should receive:
-
-- special point medallion with `∞`
-- stronger visual treatment
-- Sudden Death label/banner
-- dramatic but fast transition
-
-## Deliverable
-
-Every possible match conclusion is complete.
-
----
-
-# Stage 12 — Save + Resume
-
-## localStorage
-
-Save after every valid state transition.
-
-Include:
-
-- schema version
-- game state
-- timestamp
-
-## Startup
-
-If a saved game exists:
-
-```text
-Monster Mania
-
-[ Resume Game ]
-
-[ New Game ]
-```
-
-Starting a new game should ask before replacing an active saved game.
-
-## Deliverable
-
-Browser refreshes do not destroy a match.
-
----
-
-# Stage 13 — Audio Hooks
-
-Do not spend significant design time here.
-
-Add:
-
-- audio service
-- mute setting
-- event-to-sound mapping
-
-Initial sounds may be omitted.
-
-The architecture should support them later without touching game rules.
-
----
-
-# Stage 14 — Polish + QA
-
-## Visual
-
-- Card hover lift
-- Requirement highlight
-- Current-player emphasis
-- Defeat animation
-- Smooth handoff
-- Infinity Beast entrance
-- Reduced-motion support
-
-## Accessibility
-
-- Buttons keyboard accessible
-- Useful aria labels
-- No state conveyed by color alone
-- Focus management in dialogs
-- Readable text contrast
-
-## QA
-
-Play many full games.
-
-Use Rules Sandbox for edge cases.
-
----
-
-# V1 Definition of Done
-
-V1 is done when:
-
-- 2 players can start a local game
-- hands remain private
-- all normal rules work
-- all Monsters work
-- Draw 1 / Draw 2 work
-- forced discards work
-- Black Hole works
-- deck recycle behavior is correct
-- final-three behavior is correct
-- scores are correct
-- defeated piles work
-- Sudden Death works
-- refresh resumes the game
-- desktop UI feels complete
-- automated rules tests pass
-
-Mobile optimization is a separate milestone after this.
+Use **Table** in visible copy and types. The skeleton includes short-code validation, transport-neutral commands/events, a player-filtered state contract, and an in-memory authoritative service that owns two seats, authenticates opaque seat tokens, applies actions through the engine, validates resulting state, and returns only the requesting player's private hand. The UI may add create/join/waiting/error states against a replaceable Table client interface.
+
+Do not:
+
+- claim that the in-memory service is deployed or reachable by another browser
+- simulate a remote opponent inside the online flow
+- treat browser storage as authoritative multiplayer state
+- send or expose both private hands
+- bake a particular database or realtime vendor into engine types
+
+Deliverable: service tests protect Table lifecycle, authority, and privacy; the UI and network seam make the next integration clear while plainly explaining that live Online Table play is not connected yet.
+
+## Milestone 5 — Accessibility, responsive safety, and QA
+
+- semantic buttons and keyboard-complete interaction
+- visible focus and non-color state cues
+- useful accessible card labels
+- status announcements for draws, turns, discards, and results
+- focus management for dialogs/trays
+- readable contrast
+- reduced-motion support
+- desktop-first layout with safe narrow-screen behavior
+- no avoidable console warnings or errors
+
+Before MVP handoff:
+
+1. Run `npm run test`.
+2. Run `npm run lint`.
+3. Run `npm run typecheck`.
+4. Run `npm run build`.
+5. Exercise every legal sandbox preset.
+6. Play a complete Solo match.
+7. Verify forced discard, Action chaining, Black Hole, final three, and Sudden Death.
+8. Verify the computer hand is not exposed in normal Solo UI.
+9. Verify Online Table copy accurately describes its disconnected status.
+
+## MVP definition of done
+
+- Solo Game is playable from start through normal victory or Sudden Death.
+- Human and computer use the same deterministic engine.
+- AI returns only legal actions through the standard action API.
+- All rules and invariant tests pass, including expansion-regression cases.
+- Local save/restore validates state.
+- `/dev/rules` covers the documented edge cases.
+- The Online Table skeleton has consistent terminology and a backend-ready privacy boundary.
+- No UI claims that live online play exists.
+- Accessibility requirements are met for the implemented flows.
+- Tests, lint, type checking, and production build pass.
+
+## After the MVP — functional Online Tables
+
+Live two-browser play requires the next roadmap phase: an authoritative service, Table membership and seat identity, action validation, filtered player views, realtime synchronization, lifecycle cleanup, and reconnect behavior. Database/persistence technology should be selected at that point based on hosting, operational needs, and expected scale.

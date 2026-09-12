@@ -1,75 +1,74 @@
-# React + TypeScript + Vite
+# Monster Mania
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Monster Mania is a two-participant digital card game built with Vite, React, TypeScript, and a deterministic rules engine. The engine is kept independent of React so the same legal actions and state transitions can power human input, the computer opponent, tests, saved games, and future Online Table play.
 
-Currently, two official plugins are available:
+## MVP modes
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Solo Game:** one local human against a computer-controlled opponent. This is the playable MVP path.
+- **Online Table:** private two-player contracts plus an in-memory authoritative service skeleton. Live cross-browser play is not implemented yet.
 
-## React Compiler
+Local pass-and-play is not part of the current MVP direction. The game still always has exactly two participants; controller type is a product/input concern rather than a different ruleset.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Setup
 
-## Expanding the ESLint configuration
+Requirements: a current Node.js release supported by Vite and npm.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+Open the local URL printed by Vite. Production assets are served from `public/assets/`.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Commands
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+npm run dev         # start the Vite development server
+npm run smoke       # dependency-free rules/integration smoke check
+npm run test        # run the Vitest suite once
+npm run test:watch  # run Vitest in watch mode
+npm run lint        # run ESLint
+npm run typecheck   # run the TypeScript project build/check
+npm run build       # type-check and create a production bundle
+npm run preview     # preview the production bundle
 ```
+
+## Project structure
+
+```text
+src/
+  game/
+    definitions/    card and Monster catalogs
+    engine/         authoritative actions, transitions, and validation
+    selectors/      derived legal moves and scores
+    ai/             computer action selection (MVP milestone)
+    serialization/  versioned local save/restore
+    network/        Online Table contracts, private views, and in-memory service
+    sandbox/        deterministic rules scenarios
+  components/       presentation components (as the UI is built)
+  App.tsx            application entry UI
+public/assets/       browser-served game art
+assets/cards/        source copies of complete-card assets
+docs/                product, rules, testing, and visual guidance
+```
+
+The structure grows by milestone, so some destination directories may not exist yet. The important boundary is stable: UI, AI, and networking submit `GameAction`s; only the engine changes authoritative game state.
+
+## Documentation
+
+- [Project overview](docs/00-project-overview.md)
+- [Rules source of truth](docs/01-rules-source-of-truth.md)
+- [Development plan](docs/02-v1-development-plan.md)
+- [Testing checklist](docs/03-testing-checklist.md)
+- [Roadmap](docs/04-roadmap.md)
+- [Rules sandbox and validation](docs/05-rules-sandbox-and-state-validation.md)
+- [Visual design guide](docs/card-game-visual-design-guide.md)
+- [Online Table implementation guide](docs/online-table-implementation-guide.md)
+
+The permanent Rules Sandbox lives at `/dev/rules`. It includes deterministic legal presets, state validation status, interactive actions, and raw serialized state inspection.
+
+## Current limitations
+
+Online Table is intentionally only a service skeleton. `src/game/network/` can create and join two-seat Tables in memory, authenticate seat tokens, accept actions through the shared engine, and return a player-filtered view. The repository still has no HTTP/WebSocket listener, browser connection client, database, restart recovery, or production identity system, so two devices cannot play each other yet. The next steps are described in the [Online Table implementation guide](docs/online-table-implementation-guide.md) and [roadmap](docs/04-roadmap.md).
+
+Most current card assets are complete, flattened JPGs. They are sufficient for the MVP, but they do not yet provide separate frame, illustration, text, and icon layers for fully data-driven card composition.
