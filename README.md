@@ -45,6 +45,7 @@ src/
     serialization/  versioned local save/restore
     network/        Online Table contracts, private views, and in-memory service
     sandbox/        deterministic rules scenarios
+    assets/         visible-asset manifest, cache version, and preload system
   components/       presentation components (as the UI is built)
   App.tsx            application entry UI
 public/assets/       browser-served game art
@@ -62,6 +63,8 @@ The structure grows by milestone, so some destination directories may not exist 
 - [Testing checklist](docs/03-testing-checklist.md)
 - [Roadmap](docs/04-roadmap.md)
 - [Rules sandbox and validation](docs/05-rules-sandbox-and-state-validation.md)
+- [Tabletop UX and presentation](docs/06-tabletop-ux-and-presentation.md)
+- [Asset loading and cache strategy](docs/07-asset-loading-and-cache-strategy.md)
 - [Visual design guide](docs/card-game-visual-design-guide.md)
 - [Online Table implementation guide](docs/online-table-implementation-guide.md)
 

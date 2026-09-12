@@ -1,209 +1,259 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CORE_CATALOG } from '../../game/definitions/core'
 import type { GameCatalog, PlayerCardInstance, PlayerId } from '../../game/definitions/types'
 import type { GameAction, GameState } from '../../game/engine/types'
+import { getGameAnnouncement, type GameAnnouncementDetails } from '../../game/presentation/announcements'
+import { GAME_TIMING } from '../../game/presentation/aiPacing'
 import {
 	canDefeatMonster,
 	canUseUltimateWeapon,
 	getActiveMonsterDefinitions,
 	getCurrentPlayer,
+	getOpponent,
 	getPlayer,
 	getPlayerScore,
 } from '../../game/selectors/gameSelectors'
+import { CardInspector, type InspectableCard } from '../cards/CardInspector'
+import { CardStack } from '../cards/CardStack'
 import { MonsterCard } from '../cards/MonsterCard'
-import { CardBack } from '../cards/CardBack'
 import { PlayerCardRenderer } from '../cards/PlayerCardRenderer'
 import { DefeatedDialog } from './DefeatedDialog'
+import { GameAnnouncement } from './GameAnnouncement'
+import { MatchResultDialog } from './MatchResultDialog'
 
 interface GameBoardProps {
 	state: GameState
 	localPlayerId: PlayerId
 	onAction: (action: GameAction) => void
+	onPlayAgain?: () => void
+	onReturnToMenu?: () => void
 	catalog?: GameCatalog
 	compact?: boolean
+	actionsResolving?: boolean
+}
+
+function getRequirementStatus(
+	hand: PlayerCardInstance[],
+	requiredWeapons: string[],
+	catalog: GameCatalog,
+): boolean[] {
+	const available = hand.map((card) => catalog.playerCards[card.definitionId])
+	const used = new Set<number>()
+	return requiredWeapons.map((weaponId) => {
+		const match = available.findIndex(
+			(definition, index) =>
+				!used.has(index) && definition?.category === 'weapon' && definition.weaponId === weaponId,
+		)
+		if (match < 0) return false
+		used.add(match)
+		return true
+	})
 }
 
 export function GameBoard({
 	state,
 	localPlayerId,
 	onAction,
+	onPlayAgain,
+	onReturnToMenu,
 	catalog = CORE_CATALOG,
 	compact = false,
+	actionsResolving = false,
 }: GameBoardProps) {
 	const localPlayer = getPlayer(state, localPlayerId) ?? state.players[0]
+	const opponent = getOpponent(state, localPlayerId)
 	const currentPlayer = getCurrentPlayer(state)
-	const isLocalTurn = currentPlayer.id === localPlayerId && state.phase !== 'game-over'
+	const isLocalTurn = currentPlayer.id === localPlayerId && state.phase !== 'game-over' && !actionsResolving
 	const monsters = getActiveMonsterDefinitions(state, catalog)
 	const ultimate = localPlayer.hand.find(
 		(card) => catalog.playerCards[card.definitionId]?.category === 'ultimate-weapon',
 	)
 	const statusMessage = state.events.at(-1)?.message ?? 'Game ready.'
 	const pendingForLocalPlayer = state.pendingDiscard?.playerId === localPlayerId
-	const victoryRef = useRef<HTMLElement>(null)
+	const [inspectedCard, setInspectedCard] = useState<InspectableCard | null>(null)
+	const [announcement, setAnnouncement] = useState<GameAnnouncementDetails | null>(null)
+	const previousEventId = useRef(state.events.at(-1)?.id ?? 0)
 
 	useEffect(() => {
-		if (state.phase === 'game-over') {
-			victoryRef.current?.focus()
+		const latestId = state.events.at(-1)?.id ?? 0
+		if (latestId < previousEventId.current) {
+			previousEventId.current = latestId
+			setAnnouncement(null)
+			return
 		}
-	}, [state.phase])
+		const nextAnnouncement = getGameAnnouncement(state.events, previousEventId.current)
+		previousEventId.current = latestId
+		if (!nextAnnouncement) return
+		setAnnouncement(nextAnnouncement)
+		const timeout = window.setTimeout(() => setAnnouncement(null), GAME_TIMING.announcement)
+		return () => window.clearTimeout(timeout)
+	}, [state.events])
 
 	const activateCard = (card: PlayerCardInstance) => {
-		if (pendingForLocalPlayer) {
+		if (pendingForLocalPlayer && !actionsResolving) {
 			onAction({ type: 'SELECT_DISCARD', playerId: localPlayerId, cardInstanceId: card.instanceId })
 			return
 		}
-		if (catalog.playerCards[card.definitionId]?.category === 'action') {
-			onAction({ type: 'PLAY_ACTION_CARD', playerId: localPlayerId, cardInstanceId: card.instanceId })
-		}
+		const definition = catalog.playerCards[card.definitionId]
+		const playable = isLocalTurn && state.turn.actionPhaseOpen && definition.category === 'action'
+		setInspectedCard({
+			name: definition.name,
+			assetPath: definition.assetPath,
+			description: definition.rulesText,
+			meta: definition.category.replace('-', ' '),
+			playLabel: 'Play card',
+			onPlay: playable
+				? () => onAction({ type: 'PLAY_ACTION_CARD', playerId: localPlayerId, cardInstanceId: card.instanceId })
+				: undefined,
+		})
 	}
 
 	return (
 		<main className={`game-board${compact ? ' compact-board' : ''}`}>
-		<header className="board-header">
-			<img src="/assets/logo.png" alt="Monster Mania" className="board-logo" />
-			<div className="turn-status">
-				<span className="eyebrow">Turn {state.turn.number}</span>
-				<strong>{state.phase === 'game-over' ? 'Game over' : `${currentPlayer.name}'s turn`}</strong>
-				<span>{state.mode === 'sudden-death' ? 'Sudden Death · hand limit 4' : 'Action Phase · hand limit 5'}</span>
-			</div>
-			<div className="score-strip" aria-label="Scores">
-				{state.players.map((player) => (
-					<DefeatedDialog
-						key={player.id}
-						player={player}
-						catalog={catalog}
-						score={getPlayerScore(state, player.id, catalog)}
-					/>
-				))}
-			</div>
-		</header>
+			<div className="table-grain" aria-hidden="true" />
 
-		<p className="game-announcement" role="status" aria-live="polite">
-			{statusMessage}
-		</p>
+			<section className={`table-seat opponent-seat${currentPlayer.id === opponent.id ? ' active-seat' : ''}`} aria-labelledby="opponent-name">
+				<div className="seat-identity">
+					<span className="seat-marker" aria-hidden="true">M</span>
+					<div>
+						<span className="eyebrow">Across the table</span>
+						<h2 id="opponent-name">{opponent.name}</h2>
+					</div>
+				</div>
+				<div className="opponent-cards">
+					<CardStack count={state.drawPile.length} label="Shared draw deck" variant="deck" maxVisible={4} />
+					<CardStack count={opponent.hand.length} label={`${opponent.name}'s hand`} />
+				</div>
+				<div className="seat-score">
+					<DefeatedDialog player={opponent} catalog={catalog} score={getPlayerScore(state, opponent.id, catalog)} />
+				</div>
+			</section>
 
-		<section className="arena" aria-labelledby="arena-title">
-			<div className="section-heading">
-				<div>
-					<span className="eyebrow">The arena</span>
-					<h2 id="arena-title">{state.mode === 'sudden-death' ? 'Defeat the Infinity Beast' : 'Face-up Monsters'}</h2>
-				</div>
-				<div className="deck-counts" aria-label="Deck counts">
-					<span>Monster deck <strong>{state.monsterDeck.length}</strong></span>
-					<span>Draw pile <strong>{state.drawPile.length}</strong></span>
-				</div>
-			</div>
-			<div className="monster-row">
-				{monsters.map((monster) => (
-					<MonsterCard
-						key={monster.id}
-						monster={monster}
-						canDefeat={isLocalTurn && canDefeatMonster(state, localPlayerId, monster.id, catalog)}
-						canUseUltimate={Boolean(
-							isLocalTurn &&
-							ultimate &&
-							canUseUltimateWeapon(state, localPlayerId, ultimate.instanceId, monster.id, catalog),
-						)}
-						disabledReason={isLocalTurn ? 'Your hand is missing a required Weapon.' : 'Wait for your turn.'}
-						onDefeat={() => onAction({ type: 'DEFEAT_MONSTER', playerId: localPlayerId, monsterId: monster.id })}
-						onUseUltimate={() =>
-						ultimate &&
-						onAction({
-							type: 'USE_ULTIMATE_WEAPON',
-							playerId: localPlayerId,
-							cardInstanceId: ultimate.instanceId,
-							monsterId: monster.id,
-						})
-					}
-					/>
-				))}
-			</div>
-		</section>
+			<section className="turn-plaque" aria-live="polite">
+				<span>Turn {state.turn.number}</span>
+				<strong>{state.phase === 'game-over' ? 'Match complete' : currentPlayer.id === localPlayerId ? 'Your turn' : `${currentPlayer.name} is thinking`}</strong>
+				<small>{state.mode === 'sudden-death' ? 'Sudden Death · hand limit 4' : pendingForLocalPlayer ? 'Choose cards to discard' : 'Action Phase · hand limit 5'}</small>
+			</section>
 
-		<section className="player-zone" aria-labelledby="hand-title">
-			<div className="section-heading">
-				<div>
-					<span className="eyebrow">Your cards</span>
-					<h2 id="hand-title">{localPlayer.name}'s hand</h2>
+			<section className="arena" aria-labelledby="arena-title">
+				<div className="arena-heading">
+					<div>
+						<span className="eyebrow">The hunt</span>
+						<h1 id="arena-title">{state.mode === 'sudden-death' ? 'The Infinity Beast' : 'Monsters in the arena'}</h1>
+					</div>
+					<div className="monster-deck-marker" aria-label={`${state.monsterDeck.length} Monsters remain in the deck`}>
+						<span aria-hidden="true" />
+						<strong>{state.monsterDeck.length}</strong> remain
+					</div>
 				</div>
-				<span className="opponent-hand">
-					<CardBack count={state.players.find((player) => player.id !== localPlayerId)?.hand.length ?? 0} label="opponent card" />
-				</span>
-			</div>
-			<div className="player-hand">
-				{localPlayer.hand.map((card) => {
-					const definition = catalog.playerCards[card.definitionId]
-					const isAction = definition.category === 'action'
-					const selected = state.pendingDiscard?.selectedCardInstanceIds.includes(card.instanceId) ?? false
-					const canActivate = pendingForLocalPlayer || (isLocalTurn && state.turn.actionPhaseOpen && isAction)
-					return (
-						<PlayerCardRenderer
-							key={card.instanceId}
-							definition={definition}
-							onActivate={() => activateCard(card)}
-							disabled={!canActivate}
-							disabledReason={
-								pendingForLocalPlayer
-									? undefined
-									: isAction
-										? 'Action cards can only be played during your Action Phase.'
-										: 'Weapons are spent automatically when you choose a beatable Monster.'
-							}
-							selected={selected}
-						/>
-					)
-				})}
-			</div>
-			<div className="turn-controls">
-				{pendingForLocalPlayer ? (
-					<>
-						<p>
-							Select {state.pendingDiscard!.requiredCount} card{state.pendingDiscard!.requiredCount === 1 ? '' : 's'} to discard.
-						</p>
+				<div className="monster-row">
+					{monsters.map((monster) => {
+						const requirementStatus = getRequirementStatus(localPlayer.hand, monster.requiredWeapons, catalog)
+						return (
+							<MonsterCard
+								key={monster.id}
+								monster={monster}
+								canDefeat={isLocalTurn && canDefeatMonster(state, localPlayerId, monster.id, catalog)}
+								canUseUltimate={Boolean(
+									isLocalTurn && ultimate && canUseUltimateWeapon(state, localPlayerId, ultimate.instanceId, monster.id, catalog),
+								)}
+								disabledReason={isLocalTurn ? 'Your hand is missing a required Weapon.' : 'Wait for your turn.'}
+								requirementStatus={requirementStatus}
+								onInspect={() => setInspectedCard({
+									name: monster.name,
+									assetPath: monster.assetPath,
+									description: monster.lore,
+									meta: `${monster.points === 'infinity' ? 'Victory' : `${monster.points} point${monster.points === 1 ? '' : 's'}`} · Requires ${monster.requiredWeapons.join(', ')}`,
+								})}
+								onDefeat={() => onAction({ type: 'DEFEAT_MONSTER', playerId: localPlayerId, monsterId: monster.id })}
+								onUseUltimate={() => ultimate && onAction({
+									type: 'USE_ULTIMATE_WEAPON',
+									playerId: localPlayerId,
+									cardInstanceId: ultimate.instanceId,
+									monsterId: monster.id,
+								})}
+							/>
+						)
+					})}
+				</div>
+			</section>
+
+			<p className="latest-event" aria-live="polite"><span aria-hidden="true" />{statusMessage}</p>
+
+			<section className={`table-seat player-seat${isLocalTurn ? ' active-seat' : ''}`} aria-labelledby="hand-title">
+				<div className="player-seat-header">
+					<div className="seat-identity">
+						<span className="seat-marker local" aria-hidden="true">Y</span>
+						<div>
+							<span className="eyebrow">Your side</span>
+							<h2 id="hand-title">Your hand <small>{localPlayer.hand.length} cards</small></h2>
+						</div>
+					</div>
+					<DefeatedDialog player={localPlayer} catalog={catalog} score={getPlayerScore(state, localPlayer.id, catalog)} />
+				</div>
+				<div className="player-hand">
+					{localPlayer.hand.map((card) => {
+						const definition = catalog.playerCards[card.definitionId]
+						const isAction = definition.category === 'action'
+						const selected = state.pendingDiscard?.selectedCardInstanceIds.includes(card.instanceId) ?? false
+						const playable = pendingForLocalPlayer || (isLocalTurn && state.turn.actionPhaseOpen && isAction)
+						return (
+							<PlayerCardRenderer
+								key={card.instanceId}
+								definition={definition}
+								onActivate={() => activateCard(card)}
+								disabled={false}
+								playable={playable}
+								selected={selected}
+							/>
+						)
+					})}
+				</div>
+				<div className="turn-controls">
+					{pendingForLocalPlayer ? (
+						<div className="discard-controls">
+							<p>Select {state.pendingDiscard!.requiredCount} card{state.pendingDiscard!.requiredCount === 1 ? '' : 's'} to discard.</p>
+							<button
+								type="button"
+								className="primary-button"
+								disabled={actionsResolving || state.pendingDiscard!.selectedCardInstanceIds.length !== state.pendingDiscard!.requiredCount}
+								onClick={() => onAction({ type: 'CONFIRM_DISCARD', playerId: localPlayerId })}
+							>
+								Confirm discard
+							</button>
+						</div>
+					) : (
 						<button
 							type="button"
-							className="primary-button"
-							disabled={state.pendingDiscard!.selectedCardInstanceIds.length !== state.pendingDiscard!.requiredCount}
-							onClick={() => onAction({ type: 'CONFIRM_DISCARD', playerId: localPlayerId })}
+							className="end-turn-button"
+							disabled={!isLocalTurn || state.phase !== 'action'}
+							title={!isLocalTurn ? 'Wait for your turn.' : 'Draw one card and end your turn.'}
+							onClick={() => onAction({ type: 'SKIP_TURN', playerId: localPlayerId })}
 						>
-							Confirm discard
+							End turn
 						</button>
-					</>
-				) : (
-					<button
-						type="button"
-						className="secondary-button"
-						disabled={!isLocalTurn || state.phase !== 'action'}
-						title={!isLocalTurn ? 'Wait for your turn.' : 'Draw one card and end your turn.'}
-						onClick={() => onAction({ type: 'SKIP_TURN', playerId: localPlayerId })}
-					>
-						Skip turn
-					</button>
-				)}
-			</div>
-		</section>
-
-		<aside className="event-log" aria-labelledby="event-log-title">
-			<h2 id="event-log-title">Game messages</h2>
-			<ol>
-				{state.events.slice(-6).reverse().map((event) => <li key={event.id}>{event.message}</li>)}
-			</ol>
-		</aside>
-
-		{state.phase === 'game-over' ? (
-			<section
-				ref={victoryRef}
-				className="victory-panel"
-				role="dialog"
-				aria-modal="true"
-				aria-labelledby="victory-title"
-				tabIndex={-1}
-			>
-				<span className="eyebrow">Match complete</span>
-				<h2 id="victory-title">{getPlayer(state, state.winnerId ?? '')?.name} wins!</h2>
-				<p>{statusMessage}</p>
+					)}
+				</div>
 			</section>
-		) : null}
-	</main>
+
+			<details className="game-log">
+				<summary>Hunter's journal <span>{state.events.length} entries</span></summary>
+				<ol>
+					{state.events.slice(-10).reverse().map((event) => <li key={event.id}>{event.message}</li>)}
+				</ol>
+			</details>
+
+			<CardInspector card={inspectedCard} onClose={() => setInspectedCard(null)} />
+			{announcement ? <GameAnnouncement key={announcement.eventId} announcement={announcement} /> : null}
+			{state.phase === 'game-over' ? (
+				<MatchResultDialog
+					state={state}
+					localPlayerId={localPlayerId}
+					catalog={catalog}
+					onPlayAgain={onPlayAgain}
+					onReturnToMenu={onReturnToMenu}
+				/>
+			) : null}
+		</main>
 	)
 }

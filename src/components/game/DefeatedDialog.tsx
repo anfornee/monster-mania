@@ -13,10 +13,18 @@ export function DefeatedDialog({ player, catalog, score }: DefeatedDialogProps) 
 	return (
 		<>
 		<button type="button" className="pile-button" onClick={() => dialogRef.current?.showModal()}>
-			<span>{score} pts</span>
-			<small>{player.defeatedMonsterIds.length} defeated</small>
+			<span className="score-value">{score}</span>
+			<span className="score-copy"><strong>points</strong><small>{player.defeatedMonsterIds.length} defeated</small></span>
 		</button>
-		<dialog ref={dialogRef} className="defeated-dialog" aria-labelledby={`defeated-${player.id}`}>
+		<dialog
+			ref={dialogRef}
+			className="defeated-dialog"
+			aria-labelledby={`defeated-${player.id}`}
+			onCancel={(event) => {
+				event.preventDefault()
+				dialogRef.current?.close()
+			}}
+		>
 			<div className="dialog-heading">
 				<h2 id={`defeated-${player.id}`}>{player.name}'s defeated Monsters</h2>
 				<button type="button" onClick={() => dialogRef.current?.close()} aria-label="Close defeated Monsters">

@@ -3,8 +3,9 @@ import type {
 	MonsterDefinition,
 	PlayerCardDefinition,
 } from './types'
+import { versionAssetPath } from '../assets/assetVersion'
 
-const asset = (path: string) => `/assets/cards/${path}`
+const asset = (path: string) => versionAssetPath(`/assets/cards/${path}`)
 
 export const CORE_PLAYER_CARDS = [
 	...(['bow', 'grenade', 'mace', 'sword', 'spear', 'gun'] as const).map(

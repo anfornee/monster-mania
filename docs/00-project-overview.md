@@ -117,10 +117,13 @@ src/game/engine/         game creation, action application, RNG, types, validati
 src/game/selectors/      scores, legal moves, and derived view data
 src/game/ai/             replaceable computer strategy (MVP milestone)
 src/game/serialization/  schema-versioned local game storage
+src/game/presentation/   player profile, UI timing, and event-derived announcements
+src/game/assets/         asset manifest, cache versioning, and runtime preloading
 src/game/network/        Online Table protocol, private views, codes, and in-memory service
 src/game/sandbox/        deterministic scenario builders
 src/components/          React presentation as the board is built
 public/assets/           browser-served card and branding assets
+public/assets/backgrounds/ tavern menu and physical tabletop environments
 assets/cards/            source copies of current complete-card art
 docs/                    rules, implementation, testing, roadmap, and design guidance
 ```
@@ -166,6 +169,8 @@ The sandbox is development tooling, not a second rules implementation.
 The board must provide keyboard-operable semantic controls, visible focus, useful labels, non-color interaction states, appropriate status announcements, readable contrast, dialog focus management, and reduced-motion behavior. Online connection/waiting errors and unavailable actions should be explained in text.
 
 Desktop remains the first presentation target, with responsive safety rather than a separate mobile rules flow.
+
+The Solo board uses controller-neutral player seats around a shared table. Card inspection, paced one-action computer decisions, and event announcements are presentation concerns layered on top of immediate deterministic state transitions. See `06-tabletop-ux-and-presentation.md`.
 
 ## 11. Development principles
 

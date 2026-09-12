@@ -9,6 +9,7 @@ Monster Mania is a two-participant card game being adapted to React and TypeScri
 3. `docs/02-v1-development-plan.md` — implementation order.
 4. `docs/03-testing-checklist.md` and `docs/05-rules-sandbox-and-state-validation.md` — required coverage and invariants.
 5. `docs/card-game-visual-design-guide.md` — presentation direction.
+6. `docs/06-tabletop-ux-and-presentation.md` and `docs/07-asset-loading-and-cache-strategy.md` — board UI, boot flow, and cache-version conventions.
 
 If code and the rules source of truth disagree, do not silently choose one. Treat the discrepancy as a gameplay change: update the engine, tests, and rule documentation together.
 
@@ -19,10 +20,13 @@ If code and the rules source of truth disagree, do not silently choose one. Trea
 - `src/game/selectors/` — derived legal moves and display data.
 - `src/game/ai/` — computer decision policy; it must return normal legal `GameAction`s and never mutate state directly.
 - `src/game/serialization/` — versioned local save/restore.
+- `src/game/presentation/` — presentation-only timing, profile, and event-derived helpers; never authoritative rules.
+- `src/game/assets/` — authoritative visible-asset manifest, cache version, preload scheduler, and boot hook.
 - `src/game/network/` — Online Table protocol, private player views, codes, and the in-memory authoritative service boundary. No HTTP/WebSocket adapter or durable storage exists yet.
 - `src/game/sandbox/` — deterministic scenario builders; legal presets must pass state validation.
 - `src/components/` and `src/App.tsx` — React presentation and action dispatch only.
 - `public/assets/` — browser-served production assets.
+- `public/assets/backgrounds/` — swappable tavern menu and tabletop environment art.
 - `assets/cards/` — source copies of the currently available complete-card art.
 - `docs/` — product, rules, testing, roadmap, and visual documentation.
 
@@ -52,6 +56,9 @@ Run tests, lint, type checking, and a production build before handing off a mean
 - Keep random behavior seedable. Prefer pure functions and deterministic tie-breaking.
 - Use tabs for project-code indentation unless the surrounding file clearly establishes another convention.
 - Preserve keyboard operation, semantic controls, visible focus, non-color state cues, useful labels/status announcements, dialog focus management, readable contrast, and reduced-motion support.
+- Keep AI pacing one action at a time through `GameAction`; centralize durations in `src/game/presentation/aiPacing.ts` and ensure effects clean up timers.
+- Reuse `CardInspector`, physical card stacks, seat patterns, and event announcements instead of creating card-type-specific modal or animation systems.
+- Add preloaded standalone art to `src/game/assets/assetManifest.ts`; catalog card art is derived automatically. Bump `GAME_ASSET_VERSION` when replacing a public image at the same path.
 
 ## Cards, expansions, and rules changes
 

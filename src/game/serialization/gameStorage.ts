@@ -5,6 +5,10 @@ import { validateGameState } from '../engine/validateGameState'
 
 export const GAME_STORAGE_KEY = 'monster-mania:solo-game:v1'
 
+export function isResumableGame(state: GameState | null): state is GameState {
+	return Boolean(state && state.phase !== 'game-over' && state.winnerId === null)
+}
+
 export function serializeGame(state: GameState): string {
 	return JSON.stringify({ version: 1, savedAt: new Date().toISOString(), state })
 }

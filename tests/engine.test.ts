@@ -9,7 +9,7 @@ import type { GameState } from '../src/game/engine/types'
 import { validateGameState } from '../src/game/engine/validateGameState'
 import { createSandboxScenario, SANDBOX_PRESETS } from '../src/game/sandbox/presets'
 import { canDefeatMonster, getPlayerScore } from '../src/game/selectors/gameSelectors'
-import { restoreGame, serializeGame } from '../src/game/serialization/gameStorage'
+import { isResumableGame, restoreGame, serializeGame } from '../src/game/serialization/gameStorage'
 
 function newGame(): GameState {
 	return createGame({
@@ -107,6 +107,22 @@ describe('standard setup', () => {
 
 	it('creates the same game from the same seed', () => {
 		expect(newGame()).toEqual(newGame())
+	})
+
+	it('uses a proper player name in third-person narration', () => {
+		const state = createGame({
+			seed: 9,
+			startingPlayerId: 'player-1',
+			players: [
+				{ id: 'player-1', name: 'Anthony', controller: 'human-local' },
+				{ id: 'player-2', name: 'Mayhem Bot', controller: 'computer' },
+			],
+		})
+		expect(state.events[0].message).toBe('Anthony takes the first turn.')
+		expect(applyGameAction(state, { type: 'SKIP_TURN', playerId: 'player-1' }).state.events)
+			.toEqual(expect.arrayContaining([
+				expect.objectContaining({ message: 'Anthony skipped the turn.' }),
+			]))
 	})
 })
 
@@ -490,6 +506,15 @@ describe('validation, expansions, and persistence', () => {
 		const state = newGame()
 		expect(restoreGame(serializeGame(state))).toEqual(state)
 		expect(restoreGame('{"version":999}')).toBeNull()
+	})
+
+	it('does not offer completed matches as resumable games', () => {
+		const active = newGame()
+		expect(isResumableGame(active)).toBe(true)
+		const complete = createSandboxScenario('infinity-beast-beatable').state
+		complete.phase = 'game-over'
+		complete.winnerId = 'player-1'
+		expect(isResumableGame(complete)).toBe(false)
 	})
 })
 

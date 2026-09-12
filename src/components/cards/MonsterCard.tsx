@@ -7,6 +7,8 @@ interface MonsterCardProps {
 	disabledReason?: string
 	onDefeat: () => void
 	onUseUltimate: () => void
+	onInspect: () => void
+	requirementStatus: boolean[]
 }
 
 export function MonsterCard({
@@ -16,11 +18,24 @@ export function MonsterCard({
 	disabledReason,
 	onDefeat,
 	onUseUltimate,
+	onInspect,
+	requirementStatus,
 }: MonsterCardProps) {
 	const points = monster.points === 'infinity' ? 'infinite victory' : `${monster.points} points`
 	return (
-		<article className={`monster-card${monster.isSuddenDeath ? ' sudden-death-card' : ''}`}>
-		<img className="card-image" src={monster.assetPath} alt={`${monster.name}, ${points}`} draggable={false} />
+		<article className={`monster-card${monster.isSuddenDeath ? ' sudden-death-card' : ''}${canDefeat ? ' beatable' : ''}`}>
+		<button type="button" className="monster-inspect-button" onClick={onInspect} aria-label={`Inspect ${monster.name}, ${points}`}>
+			<img className="card-image" src={monster.assetPath} alt="" draggable={false} />
+			<span className="inspect-hint">View card</span>
+		</button>
+		<div className="requirement-strip" aria-label={`Requires ${monster.requiredWeapons.join(', ')}`}>
+			{monster.requiredWeapons.map((weapon, index) => (
+				<span key={`${weapon}-${index}`} className={requirementStatus[index] ? 'requirement-ready' : ''}>
+					<b aria-hidden="true">{requirementStatus[index] ? '✓' : '—'}</b>
+					{weapon === 'gun' ? 'Rifle' : `${weapon[0].toUpperCase()}${weapon.slice(1)}`}
+				</span>
+			))}
+		</div>
 		<div className="monster-actions">
 			<button
 				type="button"
@@ -36,9 +51,6 @@ export function MonsterCard({
 				</button>
 			) : null}
 		</div>
-		<p className="requirement-text">
-			<span>Requires</span> {monster.requiredWeapons.join(' + ')}
-		</p>
 	</article>
 	)
 }
