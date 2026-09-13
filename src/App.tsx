@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import './App.css'
+import { CardGallery } from './components/cards/CardGallery'
 import { GameBootScreen } from './components/game/GameBootScreen'
 import { GameBoard } from './components/game/GameBoard'
+import { OnlineLobby } from './components/game/OnlineLobby'
 import { RulesSandbox } from './dev/RulesSandbox'
 import { chooseComputerAction } from './game/ai/computerStrategy'
 import {
@@ -16,7 +18,12 @@ import { applyGameAction } from './game/engine/applyGameAction'
 import { createGame } from './game/engine/createGame'
 import type { GameAction, GameState } from './game/engine/types'
 import { validateGameState } from './game/engine/validateGameState'
+import { loadOnlineTableSession } from './game/network/firebase/tableSessionStorage'
 import { GAME_TIMING, getComputerActionDelay } from './game/presentation/aiPacing'
+import {
+	getActionPresentationSteps,
+	type GamePresentationStep,
+} from './game/presentation/presentationSequence'
 import {
 	loadPlayerName,
 	normalizePlayerName,
@@ -78,7 +85,10 @@ function HomeScreen({ hasSavedGame, onPlaySolo, onResume, onOpenOnline }: {
 			<div className="home-scrim" />
 			<nav className="home-nav" aria-label="Primary navigation">
 				<img src={GAME_ASSET_PATHS.logo} alt="Monster Mania" />
-				<a href="/dev/rules">Rules &amp; Sandbox</a>
+				<div className="home-nav-links">
+					<a href="/cards">Card gallery</a>
+					<a href="/dev/rules">Rules &amp; Sandbox</a>
+				</div>
 			</nav>
 			<section className="tavern-hero" aria-labelledby="home-title">
 				<div className="hero-copy">
@@ -91,7 +101,7 @@ function HomeScreen({ hasSavedGame, onPlaySolo, onResume, onOpenOnline }: {
 					</div>
 					<div className="home-modes" aria-label="Game modes">
 						<div><strong>Solo Game</strong><span>Ready to play</span></div>
-						<button type="button" onClick={onOpenOnline}><strong>Online Table</strong><span>Coming soon</span></button>
+						<button type="button" onClick={onOpenOnline}><strong>Online Table</strong><span>Lobby available</span></button>
 					</div>
 				</div>
 			</section>
@@ -148,37 +158,73 @@ function NameSetup({ initialName, onBack, onStart }: {
 	)
 }
 
-function OnlineSkeleton({ onBack }: { onBack: () => void }) {
-	const [code, setCode] = useState('')
-	return (
-		<main className="online-shell">
-			<button type="button" className="back-button" onClick={onBack}>← Back</button>
-			<section className="online-panel">
-				<span className="eyebrow">Online Table · coming soon</span>
-				<h1>A seat is waiting across the table.</h1>
-				<p>The private Table protocol and server boundary are prepared, but live cross-device matches are not connected yet.</p>
-				<div className="table-options">
-					<div><h2>Create Table</h2><p>Future flow: create a private Table and share its code.</p><button type="button" disabled>Create Table</button></div>
-					<form onSubmit={(event) => event.preventDefault()}>
-						<h2>Join Table</h2>
-						<label htmlFor="table-code">Table code</label>
-						<input id="table-code" value={code} onChange={(event) => setCode(event.target.value.toUpperCase().slice(0, 5))} placeholder="AB7KQ" autoComplete="off" />
-						<button type="submit" disabled>Join Table</button>
-					</form>
-				</div>
-			</section>
-		</main>
-	)
-}
-
 function GameApplication() {
-	const [screen, setScreen] = useState<AppScreen>('home')
+	const [screen, setScreen] = useState<AppScreen>(() => (
+		loadOnlineTableSession(window.localStorage) ? 'online' : 'home'
+	))
 	const [game, setGame] = useState<GameState | null>(null)
 	const [playerName, setPlayerName] = useState(() => loadPlayerName(localStorage))
 	const [savedGame, setSavedGame] = useState<GameState | null>(() => loadSavedSoloGame(playerName))
 	const [error, setError] = useState<string | null>(null)
 	const [handoffLocked, setHandoffLocked] = useState(false)
+	const [pendingPresentation, setPendingPresentation] = useState<{
+		nextState: GameState
+		steps: GamePresentationStep[]
+		stepIndex: number
+		stateCommitted: boolean
+		handoffToHuman: boolean
+	} | null>(null)
 	const aiTurnKey = useRef<string | null>(null)
+	const decisionPlayerId = game?.pendingDiscard?.playerId ?? game?.turn.currentPlayerId
+	const decisionPlayer = game?.players.find((player) => player.id === decisionPlayerId)
+	const presentationStep = pendingPresentation?.steps[pendingPresentation.stepIndex] ?? null
+	const actionsResolving = handoffLocked || Boolean(pendingPresentation) || decisionPlayer?.controller === 'computer'
+
+	const commitGameState = useCallback((nextState: GameState, handoffToHuman = false) => {
+		if (handoffToHuman && nextState.phase !== 'game-over') setHandoffLocked(true)
+		setError(null)
+		setGame(nextState)
+		setSavedGame(isResumableGame(nextState) ? nextState : null)
+	}, [])
+
+	const beginAcceptedTransition = useCallback((
+		before: GameState,
+		action: GameAction,
+		nextState: GameState,
+	) => {
+		const steps = getActionPresentationSteps(before, nextState, action, 'player', CORE_CATALOG)
+		const actor = before.players.find((player) => player.id === action.playerId)
+		const nextDecisionId = nextState.pendingDiscard?.playerId ?? nextState.turn.currentPlayerId
+		const nextDecisionPlayer = nextState.players.find((player) => player.id === nextDecisionId)
+		const handoffToHuman = actor?.controller === 'computer' && nextDecisionPlayer?.controller !== 'computer'
+		if (steps.length === 0) {
+			commitGameState(nextState, handoffToHuman)
+			return
+		}
+		const stateCommitted = steps[0].type === 'announcement'
+		if (stateCommitted) commitGameState(nextState, handoffToHuman)
+		setPendingPresentation({ nextState, steps, stepIndex: 0, stateCommitted, handoffToHuman })
+	}, [commitGameState])
+
+	const completePresentationStep = useCallback(() => {
+		if (!pendingPresentation) return
+		const nextIndex = pendingPresentation.stepIndex + 1
+		const nextStep = pendingPresentation.steps[nextIndex]
+		let stateCommitted = pendingPresentation.stateCommitted
+		if (!stateCommitted && (!nextStep || nextStep.type === 'announcement')) {
+			commitGameState(pendingPresentation.nextState, pendingPresentation.handoffToHuman)
+			stateCommitted = true
+		}
+		if (!nextStep) {
+			setPendingPresentation(null)
+			return
+		}
+		setPendingPresentation({
+			...pendingPresentation,
+			stepIndex: nextIndex,
+			stateCommitted,
+		})
+	}, [commitGameState, pendingPresentation])
 
 	useEffect(() => {
 		if (!game) return
@@ -204,6 +250,7 @@ function GameApplication() {
 			aiTurnKey.current = null
 			return
 		}
+		if (pendingPresentation) return
 		const decisionPlayerId = game.pendingDiscard?.playerId ?? game.turn.currentPlayerId
 		const decisionPlayer = game.players.find((player) => player.id === decisionPlayerId)
 		if (decisionPlayer?.controller !== 'computer') {
@@ -229,19 +276,13 @@ function GameApplication() {
 					return
 				}
 			}
-			const nextDecisionId = result.state.pendingDiscard?.playerId ?? result.state.turn.currentPlayerId
-			const nextDecisionPlayer = result.state.players.find((player) => player.id === nextDecisionId)
-			if (result.state.phase !== 'game-over' && nextDecisionPlayer?.controller !== 'computer') {
-				setHandoffLocked(true)
-			}
-			setError(null)
-			setGame(result.state)
-			setSavedGame(isResumableGame(result.state) ? result.state : null)
+			beginAcceptedTransition(game, action, result.state)
 		}, getComputerActionDelay(game, firstAction))
 		return () => window.clearTimeout(timeout)
-	}, [game])
+	}, [beginAcceptedTransition, game, pendingPresentation])
 
 	if (window.location.pathname === '/dev/rules') return <RulesSandbox />
+	if (window.location.pathname === '/cards') return <CardGallery catalog={CORE_CATALOG} />
 
 	const beginSolo = (name: string) => {
 		const savedName = savePlayerName(localStorage, name)
@@ -252,6 +293,7 @@ function GameApplication() {
 		setScreen('solo')
 		setError(null)
 		setHandoffLocked(false)
+		setPendingPresentation(null)
 		aiTurnKey.current = null
 	}
 
@@ -269,24 +311,26 @@ function GameApplication() {
 				return
 			}
 		}
-		setError(null)
-		setGame(result.state)
-		setSavedGame(isResumableGame(result.state) ? result.state : null)
+		beginAcceptedTransition(game, action, result.state)
 	}
 
-	const decisionPlayerId = game?.pendingDiscard?.playerId ?? game?.turn.currentPlayerId
-	const decisionPlayer = game?.players.find((player) => player.id === decisionPlayerId)
-	const actionsResolving = handoffLocked || decisionPlayer?.controller === 'computer'
-
 	if (screen === 'setup') return <NameSetup initialName={playerName} onBack={() => setScreen('home')} onStart={beginSolo} />
-	if (screen === 'online') return <OnlineSkeleton onBack={() => setScreen('home')} />
+	if (screen === 'online') return <OnlineLobby initialPlayerName={playerName} onBack={() => setScreen('home')} />
 	if (screen === 'solo' && game) {
 		return (
 			<div className="game-shell">
 				<nav className="game-topbar" aria-label="Match navigation">
-					<button type="button" className="back-button" onClick={() => setScreen('home')}>← Tavern</button>
+					<button type="button" className="back-button" onClick={() => {
+						setPendingPresentation(null)
+						aiTurnKey.current = null
+						setScreen('home')
+					}}>← Tavern</button>
 					<img src={GAME_ASSET_PATHS.logo} alt="Monster Mania" />
-					<button type="button" onClick={() => setScreen('setup')}>New game</button>
+					<button type="button" onClick={() => {
+						setPendingPresentation(null)
+						aiTurnKey.current = null
+						setScreen('setup')
+					}}>New game</button>
 				</nav>
 				{error ? <div className="error-banner" role="alert">{error}</div> : null}
 				<GameBoard
@@ -294,8 +338,11 @@ function GameApplication() {
 					localPlayerId="player"
 					onAction={dispatch}
 					actionsResolving={actionsResolving}
+					presentationStep={presentationStep}
+					onPresentationComplete={completePresentationStep}
 					onPlayAgain={() => beginSolo(playerName)}
 					onReturnToMenu={() => {
+						setPendingPresentation(null)
 						setGame(null)
 						setScreen('home')
 					}}

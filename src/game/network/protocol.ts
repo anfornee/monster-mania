@@ -4,6 +4,7 @@ import type { ClientGameState } from './clientState'
 
 export type TableCode = string
 export type SeatToken = string
+export type TableStatus = 'waiting' | 'playing' | 'finished'
 
 export interface TableCredentials {
 	tableCode: TableCode
@@ -35,7 +36,7 @@ export type TableErrorCode =
 
 export interface TableSession {
 	credentials: TableCredentials
-	status: 'waiting' | 'active'
+	status: Exclude<TableStatus, 'finished'>
 	state: ClientGameState | null
 }
 

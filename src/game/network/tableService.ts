@@ -124,7 +124,7 @@ export class InMemoryTableService {
 			ok: true,
 			value: {
 				credentials: this.credentials(table.code, seat),
-				status: 'active',
+				status: 'playing',
 				state: createClientGameState(table.state, seat.playerId),
 			},
 		}

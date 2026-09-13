@@ -22,7 +22,7 @@ If code and the rules source of truth disagree, do not silently choose one. Trea
 - `src/game/serialization/` — versioned local save/restore.
 - `src/game/presentation/` — presentation-only timing, profile, and event-derived helpers; never authoritative rules.
 - `src/game/assets/` — authoritative visible-asset manifest, cache version, preload scheduler, and boot hook.
-- `src/game/network/` — Online Table protocol, private player views, codes, and the in-memory authoritative service boundary. No HTTP/WebSocket adapter or durable storage exists yet.
+- `src/game/network/` — Online Table protocol, private player views, codes, the in-memory authoritative gameplay boundary, and the Firebase anonymous-auth/Firestore lobby adapter. The deployed slice synchronizes membership only; no authoritative online gameplay transport exists yet. See `docs/08-firebase-online-lobby.md`.
 - `src/game/sandbox/` — deterministic scenario builders; legal presets must pass state validation.
 - `src/components/` and `src/App.tsx` — React presentation and action dispatch only.
 - `public/assets/` — browser-served production assets.
@@ -39,6 +39,7 @@ npm install
 npm run dev
 npm run smoke
 npm run test
+npm run test:firestore
 npm run test:watch
 npm run lint
 npm run typecheck
@@ -71,4 +72,4 @@ Run tests, lint, type checking, and a production build before handing off a mean
 
 ## Current constraints
 
-The current card art is supplied mostly as flattened, complete-card JPGs. Use it for the MVP; do not claim the layered card-rendering system is complete. The Online Table domain service is an in-memory skeleton with seat tokens and private-state filtering; it is not cross-device play until a server transport, browser client, persistence/lifecycle policy, and integration tests are added.
+The current card art is supplied mostly as flattened, complete-card JPGs. Use it for the MVP; do not claim the layered card-rendering system is complete. The Firebase Online Table lobby supports cross-browser membership only. Do not permit clients to write authoritative `GameState` or opponent-private data; full play still needs a trusted action transport, persistence/lifecycle policy, and integration tests around the existing engine and filtered views.

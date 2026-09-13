@@ -49,4 +49,15 @@ describe('table presentation privacy and actions', () => {
 		expect(markup).toContain('Return to menu')
 		expect(markup).toContain('Final score')
 	})
+
+	it('places the Draw deck before the arena cards and the Monster deck after them', () => {
+		const state = createSandboxScenario('fresh-game').state
+		const markup = renderToStaticMarkup(
+			<GameBoard state={state} localPlayerId="player-1" onAction={() => undefined} />,
+		)
+		expect(markup.indexOf('Draw deck')).toBeLessThan(markup.indexOf('monster-row'))
+		expect(markup.indexOf('Monster deck')).toBeGreaterThan(markup.indexOf('monster-row'))
+		expect(markup).toContain(`Draw deck: ${state.drawPile.length} cards`)
+		expect(markup).toContain(`Monster deck: ${state.monsterDeck.length} cards`)
+	})
 })

@@ -1,6 +1,6 @@
 # Monster Mania — Product Roadmap
 
-> This is directional, not a promise of dates. The current priority is a complete Solo Game and an honest Online Table skeleton.
+> This is directional, not a promise of dates. The current priority is a complete Solo Game and authoritative online gameplay on top of the verified Firebase Table lobby.
 
 ## Phase 1 — Rules foundation
 
@@ -33,7 +33,7 @@ Primary playable MVP target:
 
 The computer controller chooses actions; it never changes state directly or owns a separate version of the rules.
 
-## Phase 3 — Online Table skeleton
+## Phase 3 — Online Table foundation
 
 Establish the product and integration seam without pretending that live multiplayer exists:
 
@@ -46,8 +46,12 @@ Establish the product and integration seam without pretending that live multipla
 - server-side membership, turn, action, result-state, and privacy checks
 - replaceable Table client interface
 - documentation for backend implementation
+- Firebase Anonymous Auth identity created only on create/join/restore
+- Firestore-backed two-seat membership with atomic guest claiming
+- realtime lobby updates and browser-local refresh restoration
+- deny-by-default Firestore rules and emulator coverage
 
-There is no HTTP/WebSocket listener, browser connection client, database, process-restart recovery, realtime broadcast, or durable reconnect in this phase. The in-memory service is authoritative within one process, but it is not reachable cross-device and must not be presented as live online play.
+This phase now provides a real cross-browser membership lobby, but not synchronized turns. The in-memory service remains authoritative only within one process and proves how shared-engine actions and filtered player views work. Firestore clients cannot write game state.
 
 ## Phase 4 — Functional Online Tables
 
@@ -70,11 +74,10 @@ For each request, the service:
 
 ### Table lifecycle
 
-- create a private two-seat Table
-- return a short, readable, collision-checked code
-- let the second participant join
-- reject a third participant
-- start only when both seats are present
+- build gameplay sessions on the existing private two-seat Firestore Table
+- retain the collision-checked code and atomic second-seat claim
+- preserve third-participant rejection
+- start authoritative game state only when both seats are present
 - define expiration and cleanup behavior
 - maintain an opaque seat/session token separate from the public Table code
 
@@ -94,7 +97,7 @@ The exact type may evolve. The invariant may not: one browser must never receive
 
 ### Transport and storage decision
 
-Choose the backend only when beginning this phase. A small TypeScript WebSocket or Socket.IO service with in-memory Tables is acceptable for an initial deployment if process-restart loss is clearly documented. A hosted database/realtime provider is also reasonable when it reduces operating work.
+Firebase is selected for anonymous identity, lobby persistence, and realtime membership. Select a trusted execution layer for gameplay commands—such as Cloud Functions/Run or a deliberately hosted TypeScript service—without granting browsers authority to write complete state.
 
 Evaluate options against:
 

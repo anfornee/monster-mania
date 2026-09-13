@@ -5,13 +5,13 @@ Monster Mania is a two-participant digital card game built with Vite, React, Typ
 ## MVP modes
 
 - **Solo Game:** one local human against a computer-controlled opponent. This is the playable MVP path.
-- **Online Table:** private two-player contracts plus an in-memory authoritative service skeleton. Live cross-browser play is not implemented yet.
+- **Online Table:** a Firebase-backed two-browser membership lobby plus the existing authoritative gameplay-service skeleton. Synchronized online turns are the next milestone.
 
 Local pass-and-play is not part of the current MVP direction. The game still always has exactly two participants; controller type is a product/input concern rather than a different ruleset.
 
 ## Setup
 
-Requirements: a current Node.js release supported by Vite and npm.
+Requirements: Node.js 22 (recorded in `.nvmrc`) and npm. JDK 21 or newer is also required for Firestore emulator tests.
 
 ```bash
 npm install
@@ -26,6 +26,7 @@ Open the local URL printed by Vite. Production assets are served from `public/as
 npm run dev         # start the Vite development server
 npm run smoke       # dependency-free rules/integration smoke check
 npm run test        # run the Vitest suite once
+npm run test:firestore # run Firestore rules and concurrency tests in the emulator
 npm run test:watch  # run Vitest in watch mode
 npm run lint        # run ESLint
 npm run typecheck   # run the TypeScript project build/check
@@ -43,7 +44,7 @@ src/
     selectors/      derived legal moves and scores
     ai/             computer action selection (MVP milestone)
     serialization/  versioned local save/restore
-    network/        Online Table contracts, private views, and in-memory service
+    network/        Online Table contracts, private views, in-memory authority, and Firebase lobby
     sandbox/        deterministic rules scenarios
     assets/         visible-asset manifest, cache version, and preload system
   components/       presentation components (as the UI is built)
@@ -68,11 +69,12 @@ The structure grows by milestone, so some destination directories may not exist 
 - [Firebase deployment](docs/deployment.md)
 - [Visual design guide](docs/card-game-visual-design-guide.md)
 - [Online Table implementation guide](docs/online-table-implementation-guide.md)
+- [Firebase Online Table lobby foundation](docs/08-firebase-online-lobby.md)
 
 The permanent Rules Sandbox lives at `/dev/rules`. It includes deterministic legal presets, state validation status, interactive actions, and raw serialized state inspection.
 
 ## Current limitations
 
-Online Table is intentionally only a service skeleton. `src/game/network/` can create and join two-seat Tables in memory, authenticate seat tokens, accept actions through the shared engine, and return a player-filtered view. The repository still has no HTTP/WebSocket listener, browser connection client, database, restart recovery, or production identity system, so two devices cannot play each other yet. The next steps are described in the [Online Table implementation guide](docs/online-table-implementation-guide.md) and [roadmap](docs/04-roadmap.md).
+Online Table now has a Firebase Anonymous Auth identity abstraction and a Firestore-backed lobby that creates, joins, observes, and restores two-seat membership across browsers. `src/game/network/` also retains the in-memory authoritative gameplay proof, which accepts actions through the shared engine and returns player-filtered views. These layers are not wired into synchronized turns yet: there is no trusted deployed gameplay command handler, durable authoritative `GameState`, presence/expiration policy, or full-match integration test. The next steps are described in the [Online Table implementation guide](docs/online-table-implementation-guide.md) and [roadmap](docs/04-roadmap.md).
 
 Most current card assets are complete, flattened JPGs. They are sufficient for the MVP, but they do not yet provide separate frame, illustration, text, and icon layers for fully data-driven card composition.

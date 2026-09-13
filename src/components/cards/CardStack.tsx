@@ -24,7 +24,10 @@ export function CardStack({ count, label, variant = 'hand', maxVisible = 7 }: Ca
 				))}
 				{count === 0 ? <span className="empty-card-slot" /> : null}
 			</div>
-			<span className="stack-label">{label} <strong>{count}</strong></span>
+			<span className="stack-label">
+				<span>{label}</span>
+				<strong>{count}<small> card{count === 1 ? '' : 's'}</small></strong>
+			</span>
 		</div>
 	)
 }

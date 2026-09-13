@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { CORE_CATALOG } from '../../game/definitions/core'
 import type { GameCatalog, PlayerCardInstance, PlayerId } from '../../game/definitions/types'
 import type { GameAction, GameState } from '../../game/engine/types'
-import { getGameAnnouncement, type GameAnnouncementDetails } from '../../game/presentation/announcements'
-import { GAME_TIMING } from '../../game/presentation/aiPacing'
+import type { GamePresentationStep } from '../../game/presentation/presentationSequence'
 import {
 	canDefeatMonster,
 	canUseUltimateWeapon,
@@ -20,6 +19,7 @@ import { PlayerCardRenderer } from '../cards/PlayerCardRenderer'
 import { DefeatedDialog } from './DefeatedDialog'
 import { GameAnnouncement } from './GameAnnouncement'
 import { MatchResultDialog } from './MatchResultDialog'
+import { OpponentCardReveal } from './OpponentCardReveal'
 
 interface GameBoardProps {
 	state: GameState
@@ -30,6 +30,8 @@ interface GameBoardProps {
 	catalog?: GameCatalog
 	compact?: boolean
 	actionsResolving?: boolean
+	presentationStep?: GamePresentationStep | null
+	onPresentationComplete?: () => void
 }
 
 function getRequirementStatus(
@@ -59,6 +61,8 @@ export function GameBoard({
 	catalog = CORE_CATALOG,
 	compact = false,
 	actionsResolving = false,
+	presentationStep = null,
+	onPresentationComplete,
 }: GameBoardProps) {
 	const localPlayer = getPlayer(state, localPlayerId) ?? state.players[0]
 	const opponent = getOpponent(state, localPlayerId)
@@ -71,23 +75,6 @@ export function GameBoard({
 	const statusMessage = state.events.at(-1)?.message ?? 'Game ready.'
 	const pendingForLocalPlayer = state.pendingDiscard?.playerId === localPlayerId
 	const [inspectedCard, setInspectedCard] = useState<InspectableCard | null>(null)
-	const [announcement, setAnnouncement] = useState<GameAnnouncementDetails | null>(null)
-	const previousEventId = useRef(state.events.at(-1)?.id ?? 0)
-
-	useEffect(() => {
-		const latestId = state.events.at(-1)?.id ?? 0
-		if (latestId < previousEventId.current) {
-			previousEventId.current = latestId
-			setAnnouncement(null)
-			return
-		}
-		const nextAnnouncement = getGameAnnouncement(state.events, previousEventId.current)
-		previousEventId.current = latestId
-		if (!nextAnnouncement) return
-		setAnnouncement(nextAnnouncement)
-		const timeout = window.setTimeout(() => setAnnouncement(null), GAME_TIMING.announcement)
-		return () => window.clearTimeout(timeout)
-	}, [state.events])
 
 	const activateCard = (card: PlayerCardInstance) => {
 		if (pendingForLocalPlayer && !actionsResolving) {
@@ -109,7 +96,7 @@ export function GameBoard({
 	}
 
 	return (
-		<main className={`game-board${compact ? ' compact-board' : ''}`}>
+		<main className={`game-board${compact ? ' compact-board' : ''}${presentationStep ? ' presentation-paused' : ''}`}>
 			<div className="table-grain" aria-hidden="true" />
 
 			<section className={`table-seat opponent-seat${currentPlayer.id === opponent.id ? ' active-seat' : ''}`} aria-labelledby="opponent-name">
@@ -121,7 +108,6 @@ export function GameBoard({
 					</div>
 				</div>
 				<div className="opponent-cards">
-					<CardStack count={state.drawPile.length} label="Shared draw deck" variant="deck" maxVisible={4} />
 					<CardStack count={opponent.hand.length} label={`${opponent.name}'s hand`} />
 				</div>
 				<div className="seat-score">
@@ -141,40 +127,44 @@ export function GameBoard({
 						<span className="eyebrow">The hunt</span>
 						<h1 id="arena-title">{state.mode === 'sudden-death' ? 'The Infinity Beast' : 'Monsters in the arena'}</h1>
 					</div>
-					<div className="monster-deck-marker" aria-label={`${state.monsterDeck.length} Monsters remain in the deck`}>
-						<span aria-hidden="true" />
-						<strong>{state.monsterDeck.length}</strong> remain
-					</div>
 				</div>
-				<div className="monster-row">
-					{monsters.map((monster) => {
-						const requirementStatus = getRequirementStatus(localPlayer.hand, monster.requiredWeapons, catalog)
-						return (
-							<MonsterCard
-								key={monster.id}
-								monster={monster}
-								canDefeat={isLocalTurn && canDefeatMonster(state, localPlayerId, monster.id, catalog)}
-								canUseUltimate={Boolean(
-									isLocalTurn && ultimate && canUseUltimateWeapon(state, localPlayerId, ultimate.instanceId, monster.id, catalog),
-								)}
-								disabledReason={isLocalTurn ? 'Your hand is missing a required Weapon.' : 'Wait for your turn.'}
-								requirementStatus={requirementStatus}
-								onInspect={() => setInspectedCard({
-									name: monster.name,
-									assetPath: monster.assetPath,
-									description: monster.lore,
-									meta: `${monster.points === 'infinity' ? 'Victory' : `${monster.points} point${monster.points === 1 ? '' : 's'}`} · Requires ${monster.requiredWeapons.join(', ')}`,
-								})}
-								onDefeat={() => onAction({ type: 'DEFEAT_MONSTER', playerId: localPlayerId, monsterId: monster.id })}
-								onUseUltimate={() => ultimate && onAction({
-									type: 'USE_ULTIMATE_WEAPON',
-									playerId: localPlayerId,
-									cardInstanceId: ultimate.instanceId,
-									monsterId: monster.id,
-								})}
-							/>
-						)
-					})}
+				<div className="arena-table-layout">
+					<div className="board-deck draw-deck">
+						<CardStack count={state.drawPile.length} label="Draw deck" variant="deck" maxVisible={4} />
+					</div>
+					<div className="monster-row">
+						{monsters.map((monster) => {
+							const requirementStatus = getRequirementStatus(localPlayer.hand, monster.requiredWeapons, catalog)
+							return (
+								<MonsterCard
+									key={monster.id}
+									monster={monster}
+									canDefeat={isLocalTurn && canDefeatMonster(state, localPlayerId, monster.id, catalog)}
+									canUseUltimate={Boolean(
+										isLocalTurn && ultimate && canUseUltimateWeapon(state, localPlayerId, ultimate.instanceId, monster.id, catalog),
+									)}
+									disabledReason={isLocalTurn ? 'Your hand is missing a required Weapon.' : 'Wait for your turn.'}
+									requirementStatus={requirementStatus}
+									onInspect={() => setInspectedCard({
+										name: monster.name,
+										assetPath: monster.assetPath,
+										description: monster.lore,
+										meta: `${monster.points === 'infinity' ? 'Victory' : `${monster.points} point${monster.points === 1 ? '' : 's'}`} · Requires ${monster.requiredWeapons.join(', ')}`,
+									})}
+									onDefeat={() => onAction({ type: 'DEFEAT_MONSTER', playerId: localPlayerId, monsterId: monster.id })}
+									onUseUltimate={() => ultimate && onAction({
+										type: 'USE_ULTIMATE_WEAPON',
+										playerId: localPlayerId,
+										cardInstanceId: ultimate.instanceId,
+										monsterId: monster.id,
+									})}
+								/>
+							)
+						})}
+					</div>
+					<div className="board-deck monster-deck">
+						<CardStack count={state.monsterDeck.length} label="Monster deck" variant="deck" maxVisible={4} />
+					</div>
 				</div>
 			</section>
 
@@ -244,8 +234,22 @@ export function GameBoard({
 			</details>
 
 			<CardInspector card={inspectedCard} onClose={() => setInspectedCard(null)} />
-			{announcement ? <GameAnnouncement key={announcement.eventId} announcement={announcement} /> : null}
-			{state.phase === 'game-over' ? (
+			{presentationStep?.type === 'opponent-card' ? (
+				<OpponentCardReveal
+					key={presentationStep.card.id}
+					presentation={presentationStep.card}
+					catalog={catalog}
+					onComplete={() => onPresentationComplete?.()}
+				/>
+			) : null}
+			{presentationStep?.type === 'announcement' ? (
+				<GameAnnouncement
+					key={presentationStep.announcement.eventId}
+					announcement={presentationStep.announcement}
+					onComplete={onPresentationComplete}
+				/>
+			) : null}
+			{state.phase === 'game-over' && !presentationStep ? (
 				<MatchResultDialog
 					state={state}
 					localPlayerId={localPlayerId}

@@ -6,9 +6,10 @@ The Solo Game is presented as two seats around a shared tavern table. This layer
 
 ## Board composition
 
-- The opponent seat is at the top with identity, score, defeated pile, a face-down hand, and the shared draw deck.
+- The opponent seat is at the top with identity, score, defeated pile, and a face-down hand.
+- The shared Draw deck sits to the left of the central Monster arena and the Monster deck sits to its right. Both use labeled numeric badges so their remaining counts stay legible independently of the background artwork.
 - Face-up Monsters occupy the central arena. Their requirement chips show both the required Weapon name and a check/dash state, so availability is not communicated by color alone.
-- The local seat is at the bottom with a large hand, integrated score/defeated pile, shared deck, and turn control.
+- The local seat is at the bottom with a large hand, integrated score/defeated pile, and turn control.
 - The latest event remains visible. Full recent history is available from the compact Hunter's journal.
 - `PlayerState` and neutral seat language remain controller-agnostic so a future Online Table can reuse the composition without pretending every opponent is a bot.
 
@@ -24,13 +25,17 @@ Normal player and Monster cards use shared sizing tokens in `src/App.css`. The e
 
 ## AI pacing and presentation events
 
-The application asks the deterministic strategy for one action at a time. Each result is applied through `applyGameAction`, validated in development, rendered, and followed by a short centralized delay before the next decision. Timing constants live in `src/game/presentation/aiPacing.ts`.
+The application asks the deterministic strategy for one action at a time. Each result is produced through `applyGameAction` and validated in development. `src/game/presentation/presentationSequence.ts` then derives an ordered, presentation-only sequence from the accepted action and its resulting events. Opponent cards reveal before that accepted state is committed to the visible board; blocking announcements follow the commit. No further controller decision is requested until every step completes. Timing constants live in `src/game/presentation/aiPacing.ts`.
 
-React effects own the timers and cancel them when state changes or the component unmounts. Starting or leaving a game therefore cannot leave an old whole-turn callback mutating a later match. Controls are locked while the computer owns the decision or during the brief handoff beat.
+React effects own AI and handoff timers and cancel them when state changes or the component unmounts. Blocking visual steps advance from their CSS animation completion event. Starting or leaving a game therefore cannot leave an old whole-turn callback mutating a later match. Controls are locked while the computer owns the decision, a presentation step is active, or during the brief handoff beat.
 
-Presentation-only movement is driven by mounting/unmounting visual cards after authoritative state changes. New hand cards deal into place, new Monsters enter the arena, and opponent card backs visibly change count. The rules state is never delayed to wait for CSS.
+Presentation-only movement is driven by mounting/unmounting visual cards around authoritative state changes. New hand cards deal into place, new Monsters enter the arena, and opponent card backs visibly change count. An opponent's played or forced-discarded cards are the intentional privacy exception: their definitions are derived from the accepted normal `GameAction`, revealed through one shared flip presentation, and then committed to the discard/defeat result. The transition owns no rules state and cannot dispatch actions.
 
-Major events are derived from new `GameEvent`s by `src/game/presentation/announcements.ts`. `GameAnnouncement` currently handles Monster defeat and Sudden Death. It uses a polite live region without duplicating every routine journal entry.
+Major events are derived from new `GameEvent`s by `src/game/presentation/announcements.ts`. `GameAnnouncement` currently handles Monster defeat and Sudden Death. It uses a polite live region without duplicating every routine journal entry. Announcements are blocking sequence steps: controls, AI decisions, later board animations, and the result dialog wait for the announcement's fade-out animation to finish.
+
+## Card gallery
+
+`/cards` is a read-only browser derived directly from the active `GameCatalog`. It includes regular and Sudden Death Monsters plus every player-card definition, groups Ultimate Weapons with Weapons, and reuses `CardInspector` without supplying gameplay callbacks. It must not hold or mutate a `GameState`.
 
 ## Player identity and match lifecycle
 

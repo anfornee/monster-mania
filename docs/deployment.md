@@ -1,6 +1,6 @@
 # Deployment
 
-Monster Mania is a static Vite application hosted with Firebase Hosting. GitHub Actions builds and deploys the site for pull requests and updates the live site after changes reach `main`.
+Monster Mania is a Vite application hosted with Firebase Hosting. Firebase Anonymous Auth and Cloud Firestore also back the Online Table membership lobby. GitHub Actions verifies the app and Firestore rules, creates Hosting previews for pull requests, and updates the live site after changes reach `main`.
 
 ## Hosting configuration
 
@@ -10,7 +10,7 @@ Monster Mania is a static Vite application hosted with Firebase Hosting. GitHub 
 - **Project alias:** `.firebaserc`
 - **Application routing:** every unmatched path is rewritten to `/index.html`, so browser navigation and routes such as `/dev/rules` work after a refresh.
 
-The repository has no server-side runtime or production environment variables. Files in `public/` are copied into the production bundle by Vite and served by Firebase with their same public paths.
+The repository has no trusted gameplay runtime yet. Files in `public/` are copied into the production bundle by Vite and served by Firebase with their same public paths. Firebase Web SDK values are public client identifiers and are loaded from `VITE_FIREBASE_*` variables locally or Firebase Hosting's `/__/firebase/init.json`; never use a service-account credential in the browser bundle.
 
 ## Automated deployments
 
@@ -21,8 +21,11 @@ npm ci
 npm run typecheck
 npm run lint
 npm test
+npm run test:firestore
 npm run build
 ```
+
+The workflows select Node 22 from `.nvmrc` and Temurin JDK 21 so Firebase Emulator Suite behavior is consistent across developer machines and CI.
 
 The commands appear as one build step in GitHub Actions. If any command fails, Firebase deployment does not run.
 
@@ -36,7 +39,7 @@ The workflow currently listens to pull requests against any base branch. Add a `
 
 ### Live deployment
 
-`.github/workflows/firebase-hosting-merge.yml` runs on every push to `main`, including a merged pull request. After the verification commands pass, it deploys the `dist/` bundle to Firebase's `live` channel.
+`.github/workflows/firebase-hosting-merge.yml` runs on every push to `main`, including a merged pull request. After the verification commands pass, it authenticates with the existing Firebase service-account secret, deploys repository-managed Firestore rules and indexes, and then deploys the `dist/` bundle to Firebase's `live` Hosting channel. A failed Firestore deployment prevents the Hosting release so the client and its required access policy cannot drift apart.
 
 The expected public Firebase URL is:
 
@@ -55,6 +58,8 @@ The workflows depend on:
 
 Do not commit the service-account JSON or copy its value into documentation. If the Firebase project is reconnected to GitHub, confirm that the generated secret name still matches both workflow files.
 
+The service account also needs permission to create/release Firebase Rules rulesets and manage Firestore indexes. If the new infrastructure step reports an IAM denial, grant that deployment identity Firebase Rules Admin and Cloud Datastore Index Admin access in project `monster-mania-aea35`; do not broaden the browser application's permissions or place this credential in a `VITE_*` variable.
+
 ## Local production check
 
 Run the same checks before opening or merging a pull request:
@@ -64,6 +69,7 @@ npm ci
 npm run typecheck
 npm run lint
 npm test
+npm run test:firestore
 npm run build
 npm run preview
 ```
@@ -75,7 +81,23 @@ Open the URL printed by Vite and verify at least:
 - `/dev/rules` loads directly and survives a browser refresh;
 - the browser console has no asset or manifest errors.
 
-## Manual Firebase deployment
+## Firestore configuration and deployment
+
+The repository owns `firestore.rules`, `firestore.indexes.json`, and their `firebase.json` entries. The initial lobby requires no composite indexes. Run security tests before deploying either file:
+
+```bash
+nvm install
+nvm use
+npm ci
+npm run test:firestore
+npx firebase-tools deploy --only firestore:rules,firestore:indexes --project monster-mania-aea35
+```
+
+The emulator requires JDK 21 or newer. Anonymous Authentication is enabled through Firebase Console. Firebase CLI 15.30.0 does not support Authentication provider declarations in `firebase.json`, so there is no repository-side Auth provider deployment command. Do not add an unsupported `auth` block to that file.
+
+App Check enforcement is intentionally deferred until online gameplay is functional and verified. See [Firebase Online Table lobby foundation](08-firebase-online-lobby.md).
+
+## Manual Hosting deployment
 
 Automated GitHub deployment is the normal release path. If a manual deployment is required, install and authenticate the Firebase CLI, build the exact commit to release, and deploy only Hosting:
 
@@ -84,6 +106,7 @@ npm ci
 npm run typecheck
 npm run lint
 npm test
+npm run test:firestore
 npm run build
 firebase deploy --only hosting --project monster-mania-aea35
 ```

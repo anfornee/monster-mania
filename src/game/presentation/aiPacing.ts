@@ -5,6 +5,7 @@ export const GAME_TIMING = {
 	aiBetweenActions: 430,
 	aiHandoff: 260,
 	announcement: 2300,
+	opponentCardReveal: 1750,
 } as const
 
 export function getComputerActionDelay(state: GameState, isFirstAction: boolean): number {

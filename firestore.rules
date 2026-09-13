@@ -1,0 +1,148 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function validCode(code) {
+      return code is string && code.matches('^[A-HJ-NP-Z2-9]{5}$');
+    }
+
+    function validName(name) {
+      return name is string && name.size() >= 2 && name.size() <= 24;
+    }
+
+    function participant(data) {
+      return signedIn() && (data.hostUid == request.auth.uid || data.guestUid == request.auth.uid);
+    }
+
+    function validTableCreate(tableId) {
+      let data = request.resource.data;
+      let code = getAfter(/databases/$(database)/documents/tableCodes/$(data.joinCode)).data;
+      return signedIn()
+        && data.keys().hasAll([
+          'schemaVersion', 'joinCode', 'status', 'hostUid', 'hostName',
+          'guestUid', 'guestName', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'schemaVersion', 'joinCode', 'status', 'hostUid', 'hostName',
+          'guestUid', 'guestName', 'createdAt', 'updatedAt'
+        ])
+        && data.schemaVersion == 1
+        && validCode(data.joinCode)
+        && data.status == 'waiting'
+        && data.hostUid == request.auth.uid
+        && validName(data.hostName)
+        && data.guestUid == null
+        && data.guestName == null
+        && data.createdAt == request.time
+        && data.updatedAt == request.time
+        && code.tableId == tableId
+        && code.joinCode == data.joinCode
+        && code.hostUid == request.auth.uid
+        && code.status == 'waiting';
+    }
+
+    function validGuestClaim(tableId) {
+      let before = resource.data;
+      let after = request.resource.data;
+      let code = getAfter(/databases/$(database)/documents/tableCodes/$(before.joinCode)).data;
+      return signedIn()
+        && before.status == 'waiting'
+        && before.guestUid == null
+        && before.guestName == null
+        && after.diff(before).affectedKeys().hasOnly(['status', 'guestUid', 'guestName', 'updatedAt'])
+        && after.status == 'playing'
+        && after.guestUid == request.auth.uid
+        && after.guestUid != before.hostUid
+        && validName(after.guestName)
+        && after.updatedAt == request.time
+        && code.tableId == tableId
+        && code.status == 'playing'
+        && code.guestUid == request.auth.uid;
+    }
+
+    function validCodeCreate(codeId) {
+      let data = request.resource.data;
+      let table = getAfter(/databases/$(database)/documents/tables/$(data.tableId)).data;
+      return signedIn()
+        && data.keys().hasAll([
+          'schemaVersion', 'joinCode', 'tableId', 'status', 'hostUid',
+          'guestUid', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'schemaVersion', 'joinCode', 'tableId', 'status', 'hostUid',
+          'guestUid', 'createdAt', 'updatedAt'
+        ])
+        && data.schemaVersion == 1
+        && validCode(codeId)
+        && data.joinCode == codeId
+        && data.tableId is string
+        && data.status == 'waiting'
+        && data.hostUid == request.auth.uid
+        && data.guestUid == null
+        && data.createdAt == request.time
+        && data.updatedAt == request.time
+        && table.joinCode == codeId
+        && table.hostUid == request.auth.uid
+        && table.status == 'waiting';
+    }
+
+    function validCodeGuestClaim() {
+      let before = resource.data;
+      let after = request.resource.data;
+      let table = getAfter(/databases/$(database)/documents/tables/$(before.tableId)).data;
+      return signedIn()
+        && before.status == 'waiting'
+        && before.guestUid == null
+        && after.diff(before).affectedKeys().hasOnly(['status', 'guestUid', 'updatedAt'])
+        && after.status == 'playing'
+        && after.guestUid == request.auth.uid
+        && after.guestUid != before.hostUid
+        && after.updatedAt == request.time
+        && table.status == 'playing'
+        && table.guestUid == request.auth.uid;
+    }
+
+    match /tableCodes/{code} {
+      // Join codes locate waiting Tables; they are invitations, not credentials.
+      // Listing is denied so clients must know the exact five-character code.
+      allow get: if signedIn();
+      allow list: if false;
+      allow create: if validCodeCreate(code);
+      allow update: if validCodeGuestClaim();
+      allow delete: if false;
+    }
+
+    match /tables/{tableId} {
+      // A signed-in joiner may read a waiting Table to claim its empty seat.
+      // Once claimed, only the two participants retain access.
+      allow get: if signedIn() && (
+        participant(resource.data)
+        || (resource.data.status == 'waiting' && resource.data.guestUid == null)
+      );
+      allow list: if false;
+      allow create: if validTableCreate(tableId);
+      allow update: if validGuestClaim(tableId);
+      allow delete: if false;
+
+      match /private/{uid} {
+        allow read: if signedIn()
+          && request.auth.uid == uid
+          && participant(get(/databases/$(database)/documents/tables/$(tableId)).data);
+        // Authoritative gameplay storage is intentionally deferred.
+        allow write: if false;
+      }
+
+      match /{document=**} {
+        allow read, write: if false;
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

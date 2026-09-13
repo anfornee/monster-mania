@@ -48,7 +48,7 @@ describe('InMemoryTableService', () => {
 		const joined = service.joinTable('abcde', 'Guest')
 		expect(joined.ok).toBe(true)
 		if (!joined.ok) return
-		expect(joined.value.status).toBe('active')
+		expect(joined.value.status).toBe('playing')
 		expect(joined.value.state?.publicState.players).toHaveLength(2)
 		expect(joined.value.state?.publicState.players.map((player) => player.name)).toEqual([
 			'Host',

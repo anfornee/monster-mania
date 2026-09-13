@@ -4,7 +4,7 @@
 >
 > **Stack:** Vite + React + TypeScript
 >
-> **MVP direction:** playable Solo Game plus an Online Table skeleton
+> **MVP direction:** playable Solo Game plus a Firebase-backed Online Table lobby
 >
 > **Later:** authoritative two-browser Tables, persistence, reconnect, responsive polish, and expansion content
 
@@ -29,24 +29,24 @@ The playable MVP mode has exactly two participants:
 
 The first computer strategy can be simple and deterministic: play useful Draw Actions, prefer the highest-point normally beatable Monster, save the Ultimate Weapon when a normal defeat is available, use it on the highest-value eligible target otherwise, and skip when no defeat is available.
 
-### Online Table skeleton
+### Online Table foundation
 
 The MVP also establishes product language and boundaries for a future private **Online Table**:
 
-- create Table
+- create a Firestore-backed Table after silently establishing anonymous identity
 - display a short Table code
-- join Table form
-- waiting/connection states
+- transactionally join from another browser
+- realtime waiting/membership states and browser-local refresh restoration
 - transport-neutral request, response, and player-view types
 - an in-memory authoritative Table service with two seats and opaque seat tokens
 - action, membership, turn, post-state, and private-view validation at the service boundary
 
-This skeleton is not live multiplayer. There is currently no HTTP/WebSocket listener, browser connection client, database, account system, process-restart recovery, cross-device synchronization, or durable reconnect support. The in-memory service is the backend seam a later transport will call. UI copy must say **Table**, never Room.
+This is a functional cross-browser lobby, not live gameplay. Firebase Anonymous Auth and Firestore synchronize the two seats, while the in-memory service remains the proof for authoritative shared-engine actions and private views. There is currently no trusted deployed gameplay command handler, persisted authoritative `GameState`, presence/expiration policy, or full-match reconnect support. UI copy must say **Table**, never Room.
 
 ### Not in the current playable MVP
 
 - local pass-and-play
-- working two-browser Online Table matches
+- working two-browser Online Table matches beyond membership
 - public matchmaking
 - accounts or cloud saves
 - spectators
@@ -119,7 +119,7 @@ src/game/ai/             replaceable computer strategy (MVP milestone)
 src/game/serialization/  schema-versioned local game storage
 src/game/presentation/   player profile, UI timing, and event-derived announcements
 src/game/assets/         asset manifest, cache versioning, and runtime preloading
-src/game/network/        Online Table protocol, private views, codes, and in-memory service
+src/game/network/        Online Table protocol, private views, in-memory authority, and Firebase lobby
 src/game/sandbox/        deterministic scenario builders
 src/components/          React presentation as the board is built
 public/assets/           browser-served card and branding assets
@@ -150,7 +150,7 @@ interface PlayerGameView {
 
 Solo save/resume uses `localStorage`, a schema version, stable definition IDs, and state validation during restore. Incompatible or invalid saves fail safely rather than crashing or entering an impossible game state.
 
-Online Table persistence is a different boundary. The in-memory Table service owns authoritative state for its process, but loses every Table on restart. A future repository/storage adapter must provide durable state and concurrency control; client `localStorage` is not an online source of truth.
+Online Table lobby membership is stored in Firestore, while `localStorage` retains only a Table reference and Firebase Auth persists the browser-local anonymous UID. Authoritative gameplay persistence is still a different boundary: the in-memory gameplay service loses state on restart, and a future trusted adapter must provide durable state, private player views, revisions, and concurrency control.
 
 ## 8. Assets
 

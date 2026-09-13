@@ -28,9 +28,9 @@ export function MonsterCard({
 			<img className="card-image" src={monster.assetPath} alt="" draggable={false} />
 			<span className="inspect-hint">View card</span>
 		</button>
-		<div className="requirement-strip" aria-label={`Requires ${monster.requiredWeapons.join(', ')}`}>
+		<div className={`requirement-strip requirement-count-${monster.requiredWeapons.length}`} aria-label={`Requires ${monster.requiredWeapons.join(', ')}`}>
 			{monster.requiredWeapons.map((weapon, index) => (
-				<span key={`${weapon}-${index}`} className={requirementStatus[index] ? 'requirement-ready' : ''}>
+				<span key={`${weapon}-${index}`} className={`requirement-pill${requirementStatus[index] ? ' requirement-ready' : ''}`}>
 					<b aria-hidden="true">{requirementStatus[index] ? '✓' : '—'}</b>
 					{weapon === 'gun' ? 'Rifle' : `${weapon[0].toUpperCase()}${weapon.slice(1)}`}
 				</span>
