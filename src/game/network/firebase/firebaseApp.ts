@@ -37,7 +37,7 @@ function optionsFromEnvironment(environment: FirebaseEnvironment): FirebaseOptio
 }
 
 function validateFirebaseOptions(options: FirebaseOptions): FirebaseOptions {
-	if (!options.apiKey || !options.authDomain || !options.appId || !options.projectId) {
+	if (!options.apiKey || !options.authDomain || !options.projectId) {
 		throw new Error('The Firebase Web app configuration is missing required fields.')
 	}
 	if (options.projectId !== FIREBASE_PROJECT_ID) {

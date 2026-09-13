@@ -25,12 +25,22 @@ describe('Firebase Web app configuration', () => {
 			json: async () => ({
 				apiKey: 'hosting-public-key',
 				authDomain: `${FIREBASE_PROJECT_ID}.firebaseapp.com`,
+				databaseURL: '',
+				messagingSenderId: '223677909735',
 				projectId: FIREBASE_PROJECT_ID,
-				appId: 'hosting-app-id',
+				storageBucket: `${FIREBASE_PROJECT_ID}.firebasestorage.app`,
 			}),
 		})
 		const options = await resolveFirebaseOptions({}, fetcher)
-		expect(options.appId).toBe('hosting-app-id')
+		expect(options).toEqual({
+			apiKey: 'hosting-public-key',
+			authDomain: `${FIREBASE_PROJECT_ID}.firebaseapp.com`,
+			databaseURL: '',
+			messagingSenderId: '223677909735',
+			projectId: FIREBASE_PROJECT_ID,
+			storageBucket: `${FIREBASE_PROJECT_ID}.firebasestorage.app`,
+		})
+		expect(options.appId).toBeUndefined()
 		expect(fetcher).toHaveBeenCalledWith('/__/firebase/init.json')
 	})
 
