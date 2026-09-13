@@ -1,117 +1,105 @@
-# Firebase Online Table lobby foundation
+# Firebase Online Table
 
 ## Scope and status
 
-Firebase now provides the first cross-browser Online Table slice: a player can create a two-seat Table, share a five-character code, and a second browser can transactionally claim the guest seat. Both participants subscribe to the same lobby document. This milestone stops at synchronized membership; Firestore does not yet store authoritative `GameState` or accept gameplay actions.
+Monster Mania now has a locally implemented and emulator-verified authoritative Online Table path. Two anonymous Firebase users can create and join a Table, Cloud Functions initializes one match, and authenticated commands run through the existing deterministic engine inside Firestore transactions. The browser receives shared public state plus only its own private hand.
 
-The Firebase project is `monster-mania-aea35`. The checked-in Web client uses public `VITE_FIREBASE_*` configuration or Firebase Hosting's `/__/firebase/init.json` fallback. Service-account JSON and other server credentials must never be placed in Vite variables or committed.
+This implementation has not yet been deployed or completed as a full live two-browser match. Do not describe Online gameplay as production-ready until the IAM change, deployment, and live checklist in `deployment.md` succeed.
 
-The live infrastructure audit on September 12, 2026 found:
+The Firebase project is `monster-mania-aea35`; its default Firestore database is Standard edition in `nam5`. Functions run in `us-central1`, an appropriate low-latency region for the multi-region database. Anonymous Authentication must remain enabled. Web SDK configuration is public client identification loaded from `VITE_FIREBASE_*` values or Firebase Hosting's `/__/firebase/init.json`; service-account credentials must never enter Vite variables or the repository.
 
-- Firebase Hosting was already configured through `.firebaserc`, `firebase.json`, and the two Hosting workflows.
-- the default Firestore database is Standard edition in `nam5` according to the Firebase CLI. This differs from the originally reported `nam7`; code does not assume either location.
-- Anonymous Authentication is enabled in the Firebase Console.
-- two Web app registrations currently exist. The intended local configuration uses app ID `1:223677909735:web:362053a03f407b1f4f3042`; an extra `Monster Mania Web` registration was created during setup. Both target the same Firebase project. Do not delete either registration without first confirming it is unused.
+## Runtime architecture
 
-## Existing architecture retained
+```text
+GameBoard action
+  -> FirestoreTableClient.submitAction()
+  -> submitOnlineGameCommand callable (authenticated UID)
+  -> Firestore transaction
+  -> shared applyGameAction() + validateGameState()
+  -> authoritative state + public view + two private views
+  -> table and own-private listeners
+  -> local presentation queue
+```
 
-`src/game/network` already contained the transport-neutral protocol, secure short-code generation, an in-memory two-seat authoritative service, and `createClientGameState()`, which removes the opponent's hand and ordered private deck data. The service applies ordinary `GameAction`s with `applyGameAction()` and validates the resulting state. That remains the design for full online gameplay.
+`initializeOnlineGame` is an authenticated, idempotent callable fallback. `initializeGameWhenTableIsSeated` is a Firestore trigger that initializes when the guest claim changes a Table to `playing`. A transaction ensures racing trigger/callable/reconnect attempts create exactly one shuffled match. The server supplies the random seed; neither browser supplies decks, hands, starting player, seat, or resulting state.
 
-The Firebase browser client under `src/game/network/firebase` is a separate lobby adapter. It reuses the Table code format and shared `waiting | playing | finished` lifecycle vocabulary, but it does not replace the authoritative in-memory gameplay proof or duplicate game rules in React.
+`submitOnlineGameCommand` accepts this untrusted wire shape:
 
-## Anonymous multiplayer identity
+```ts
+interface OnlineGameCommand {
+	tableId: string
+	commandId: string
+	expectedRevision: number
+	action: OnlineGameAction // GameAction without playerId
+}
+```
 
-`ensureMultiplayerIdentity()` is the only UI-facing identity entry point. It waits for Firebase Auth to restore its persistent browser state, returns the existing anonymous UID when present, and calls `signInAnonymously()` only when no UID exists.
+The function validates exact keys and action variants, requires Firebase Auth, resolves the UID against the Table seats, restores `playerId` server-side, checks match state, turn ownership, and revision, then invokes the normal engine. A legal command increments `revision` once; a rejection changes nothing. `commandId` is a UUID generated with `crypto.randomUUID()`. The most recent 64 accepted IDs remain in authoritative state, so an exact retry returns the committed revision without applying the action twice. Firestore transaction retries serialize concurrent commands; a different command based on the losing revision is stale.
 
-The app does not initialize Firebase or create an anonymous user on an ordinary site visit. Identity is requested only when the player creates or joins a Table, or when a locally stored Table reference needs to be restored. There is no login screen, account language, cross-device recovery, or user-managed credential.
-
-Firebase Auth provider enablement is not represented by a supported `firebase.json` property. Firebase CLI 15.30.0 exposes Auth user import/export but not Identity Platform provider configuration. Anonymous provider enablement therefore remains a one-time Console setting and was confirmed enabled for this project; rules and indexes remain repository-managed.
+Functions use 2nd gen Callable/Firestore APIs, Node 22, Admin SDK default credentials, `256MiB`, zero minimum instances, and a maximum of five instances. Solo remains local and continues through the same `GameAction` and engine path.
 
 ## Firestore schema
 
 ```text
 tableCodes/{joinCode}
-  schemaVersion: 1
-  joinCode: string
-  tableId: string
-  status: waiting | playing | finished
-  hostUid: string
-  guestUid: string | null
-  createdAt: server timestamp
-  updatedAt: server timestamp
+  schemaVersion, joinCode, tableId, status
+  hostUid, guestUid, createdAt, updatedAt
 
-tables/{generatedTableId}
-  schemaVersion: 1
-  joinCode: string
-  status: waiting | playing | finished
-  hostUid: string
-  hostName: string
-  guestUid: string | null
-  guestName: string | null
-  createdAt: server timestamp
-  updatedAt: server timestamp
+tables/{tableId}
+  lobby: schemaVersion, joinCode, status, host/guest UID and name, timestamps
+  gameplay: revision, publicGameState, lastGameEvent
 
-tables/{generatedTableId}/private/{uid}
-  reserved for that participant's private game view/state
+tables/{tableId}/authority/state
+  schemaVersion: 1
+  revision: number
+  gameState: complete authoritative GameState
+  processedCommands: last 64 { commandId, revision, actorUid }
+
+tables/{tableId}/private/{participantUid}
+  schemaVersion: 1
+  revision: number
+  playerId
+  hand
+  selectedCardInstanceIds
 ```
 
-The generated Table document ID is the durable internal identifier. The join code is only an exact-lookup invitation and is not an authentication credential. No composite indexes are required for this schema because collection listing and join-code queries are intentionally absent.
+The Table document's `publicGameState` contains only public facts: players without hands, hand counts, public decks as counts, active turn/phase, current and defeated Monsters, discard information, scores/winner, and public engine events. `lastGameEvent` attaches one authoritative presentation fact to the revision, including the actor and any now-public played/discarded card definition IDs. Browsers animate those facts locally; animation timers are never synchronized.
 
-## Create and join lifecycle
+The complete state is stored only under `authority/state`. Each client listens to the Table document and `private/{its own UID}` and publishes a combined snapshot only when both revisions match. It never reads the opponent's private document. Placeholder hidden cards used to render the opponent count contain no opponent instance or definition IDs.
 
-Create runs one Firestore transaction that verifies a candidate code is unused and creates matching `tables` and `tableCodes` documents. Firestore rules verify both post-transaction documents, ownership, schema, status, and server timestamps.
+## Identity, lobby, and reconnect
 
-Join runs one transaction that:
+Firebase anonymous identity is created only during create, join, or restoration. Create atomically reserves a five-character code and Table. Join atomically claims the second seat and changes both records to `playing`; transaction retries guarantee only one simultaneous guest succeeds. Local storage holds only `{ tableId, joinCode }`, while Firebase Auth persists the browser-local UID.
 
-1. reads the exact code document;
-2. rejects a missing, finished, or full Table;
-3. recognizes the same host/guest UID as a reconnect instead of consuming another seat;
-4. reads the generated Table document;
-5. assigns the requesting UID and display name as guest in both documents; and
-6. changes both statuses from `waiting` to `playing`.
-
-Firestore transaction retries make the empty guest seat a compare-and-swap boundary. If two browsers race for it, only one commit can preserve the required before-state; the other receives `TABLE_FULL`.
-
-After create/join, the browser stores only `{ tableId, joinCode }` in local storage. Firebase Auth independently persists the anonymous UID. On refresh, the lobby restores Auth first, reads the Table as that UID, verifies that UID still owns host or guest, and reattaches its realtime listener. Local storage is a navigation hint, never authority.
+On refresh, the same anonymous UID restores its seat, reattaches the two permitted listeners, and calls the idempotent initializer. Existing authoritative state is reused and never redealt. Anonymous identity has no cross-device recovery.
 
 ## Security boundary
 
-`firestore.rules` enforces the lobby schema and denies everything not explicitly allowed:
+Firestore Rules retain tightly scoped browser writes for Table creation and the one-time guest claim. They deny collection listing, arbitrary Table updates, deletion, all writes to private documents, and every read/write to `authority`. A participant can read only its own private document. Admin SDK writes from Functions bypass Rules and are the only authoritative gameplay writes.
 
-- unauthenticated reads and writes are denied;
-- collection listing is denied, including listing or searching codes;
-- a signed-in user with an exact code may read a waiting Table in order to join;
-- after the guest seat is filled, only host and guest may read the Table;
-- creation and guest claiming must update the paired Table/code documents atomically;
-- a guest claim may change only status, guest identity/name, and update time;
-- arbitrary client updates and deletes are denied;
-- a participant may read only `private/{theirUid}` and all private writes are denied for now;
-- every other document path is denied.
+A five-character invitation has limited entropy. Rate limiting, App Check enforcement, structured abuse monitoring, presence, expiration/cleanup, and cross-device accounts remain deferred hardening. These do not change the rule that the browser never submits replacement state or receives an opponent hand.
 
-A five-character code has limited entropy and should be rate-limited before a broad public launch. An authenticated exact-code lookup exposes the minimal mapping/status record and pseudonymous seat UIDs so the client can distinguish missing, finished, and full Tables; it never exposes hands or gameplay secrets. A waiting Table also exposes its host display name to a joiner who knows the code. Full gameplay must preserve `createClientGameState()`'s privacy guarantees and introduce a trusted action authority (for example Cloud Functions/Run or another server) rather than permitting clients to write complete game state.
+## Local verification
 
-App Check enforcement is intentionally deferred until the lobby and later gameplay transport are verified. Enabling enforcement now would turn missing attestation configuration into a production outage rather than improving this milestone's authorization model.
-
-## Local development and verification
-
-Use Node 22 (`nvm install && nvm use`) and JDK 21 or newer. The Hosting workflows install both versions explicitly.
+Use the pinned Node `22.23.2`, npm `10.9.8`, and JDK 21 or newer:
 
 ```bash
-cp .env.example .env.local
-npm install
+nvm install
+nvm use
+npm ci
+npm ci --prefix functions
+npm run test:functions
 npm run test:firestore
 ```
 
-Set `VITE_USE_FIREBASE_EMULATORS=true` only while both Auth and Firestore emulators are running. The standalone rules suite starts Firestore itself. The production Web configuration is public Firebase client identification; keep the real local values in ignored `.env.local`, while deployed Firebase Hosting can supply `/__/firebase/init.json`.
+`test:functions` verifies the provider-neutral authority and builds the Functions bundle. `test:firestore` starts the Auth, Firestore, and Functions emulators; it runs browser Rules tests, a real anonymous-auth/callable/two-client round trip, repository transaction/concurrency tests, initialization/reconnect tests, private-state checks, and a deterministic complete match. Set `VITE_USE_FIREBASE_EMULATORS=true` only when all three emulators are running for interactive browser testing.
 
-Deploy repository-managed Firestore infrastructure with:
+Deploy Functions, Rules, and indexes together only after the deployment principal has the roles documented in `deployment.md`:
 
 ```bash
-npx firebase-tools deploy --only firestore:rules,firestore:indexes --project monster-mania-aea35
+npx --no-install firebase deploy --only functions,firestore:rules,firestore:indexes --project monster-mania-aea35
 ```
 
-Anonymous Authentication must remain enabled in Firebase Console under Authentication > Sign-in method. There is no additional CLI Auth-provider deploy command in the pinned tool version.
+## Production completion gate
 
-## Next milestone: authoritative gameplay synchronization
-
-Add a trusted, versioned command handler around the existing engine and filtered-state boundary. It should authenticate Firebase ID tokens, map UID to a Table seat, accept only `GameAction`, transactionally apply one action to a monotonic revision, validate the state, store private hands separately, and publish a distinct filtered snapshot to each participant. Define expiration/cleanup, disconnect presence, stale-action handling, idempotency, and emulator/integration coverage before calling Online Table gameplay complete.
+After deployment, complete a real two-browser match and verify create/join, one-time initialization, private hands, bidirectional actions, reveal/discard/Monster presentation, active-match refresh, synchronized revisions, stale/duplicate safety, and agreement on the final winner. Until that succeeds, the repository implementation is emulator-verified but not production-verified.

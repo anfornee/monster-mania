@@ -74,6 +74,16 @@ describeWithEmulator('Firestore Online Table security rules', () => {
 		await assertFails(getDoc(doc(firestoreFor('guest-b'), 'tables', created.table.id, 'private', 'host-a')))
 	})
 
+	it('reserves authoritative gameplay writes and authority reads for server credentials', async () => {
+		const created = await clientFor('host-a', 'CG4NW').createTable('host-a', 'Host A')
+		await clientFor('guest-b', 'unused').joinTable('guest-b', 'Guest B', created.table.joinCode)
+		const tableRef = doc(firestoreFor('host-a'), 'tables', created.table.id)
+		const authorityRef = doc(firestoreFor('host-a'), 'tables', created.table.id, 'authority', 'state')
+		await assertFails(updateDoc(tableRef, { revision: 99 }))
+		await assertFails(getDoc(authorityRef))
+		await assertFails(setDoc(authorityRef, { gameState: { forged: true } }))
+	})
+
 	it('atomically grants the final seat to only one simultaneous joiner', async () => {
 		const created = await clientFor('host-a', 'DE2NT').createTable('host-a', 'Host A')
 		const results = await Promise.allSettled([

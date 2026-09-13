@@ -1,6 +1,6 @@
 # Monster Mania contributor guide
 
-Monster Mania is a two-participant card game being adapted to React and TypeScript. The MVP direction is a playable **Solo Game** (human versus computer) plus an **Online Table** product skeleton for a future two-browser match. "Table" is the product term; do not introduce "Room" in player-facing copy.
+Monster Mania is a two-participant card game being adapted to React and TypeScript. The MVP direction is a playable **Solo Game** (human versus computer) plus an authoritative Firebase-backed **Online Table**. "Table" is the product term; do not introduce "Room" in player-facing copy.
 
 ## Read first
 
@@ -22,7 +22,7 @@ If code and the rules source of truth disagree, do not silently choose one. Trea
 - `src/game/serialization/` — versioned local save/restore.
 - `src/game/presentation/` — presentation-only timing, profile, and event-derived helpers; never authoritative rules.
 - `src/game/assets/` — authoritative visible-asset manifest, cache version, preload scheduler, and boot hook.
-- `src/game/network/` — Online Table protocol, private player views, codes, the in-memory authoritative gameplay boundary, and the Firebase anonymous-auth/Firestore lobby adapter. The deployed slice synchronizes membership only; no authoritative online gameplay transport exists yet. See `docs/08-firebase-online-lobby.md`.
+- `src/game/network/` — Online Table protocol, private player views, codes, shared authoritative gameplay logic, and the Firebase anonymous-auth/Firestore/Callable Functions client adapter. `functions/` owns trusted transactional initialization and commands. See `docs/08-firebase-online-lobby.md`.
 - `src/game/sandbox/` — deterministic scenario builders; legal presets must pass state validation.
 - `src/components/` and `src/App.tsx` — React presentation and action dispatch only.
 - `public/assets/` — browser-served production assets.
@@ -40,6 +40,7 @@ npm run dev
 npm run smoke
 npm run test
 npm run test:firestore
+npm run test:functions
 npm run test:watch
 npm run lint
 npm run typecheck
@@ -53,7 +54,7 @@ Run tests, lint, type checking, and a production build before handing off a mean
 
 - Keep authoritative rules out of React components. React renders state and dispatches actions.
 - Keep `GameState` plain and JSON-compatible: no functions, classes, DOM objects, browser APIs, or React values.
-- Solo, AI, sandbox, persistence, and future Online Table play must use the same engine and `GameAction` path.
+- Solo, AI, sandbox, persistence, and Online Table play must use the same engine and `GameAction` path.
 - Keep random behavior seedable. Prefer pure functions and deterministic tie-breaking.
 - Use tabs for project-code indentation unless the surrounding file clearly establishes another convention.
 - Preserve keyboard operation, semantic controls, visible focus, non-color state cues, useful labels/status announcements, dialog focus management, readable contrast, and reduced-motion support.
@@ -72,4 +73,4 @@ Run tests, lint, type checking, and a production build before handing off a mean
 
 ## Current constraints
 
-The current card art is supplied mostly as flattened, complete-card JPGs. Use it for the MVP; do not claim the layered card-rendering system is complete. The Firebase Online Table lobby supports cross-browser membership only. Do not permit clients to write authoritative `GameState` or opponent-private data; full play still needs a trusted action transport, persistence/lifecycle policy, and integration tests around the existing engine and filtered views.
+The current card art is supplied mostly as flattened, complete-card JPGs. Use it for the MVP; do not claim the layered card-rendering system is complete. Online Table commands must pass through Callable Functions and the shared engine; never permit clients to write authoritative `GameState` or opponent-private data. Production deployment and a live two-browser full match must be verified before calling online gameplay production-ready.

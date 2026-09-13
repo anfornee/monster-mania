@@ -44,6 +44,7 @@ export interface PublicGameState {
 export interface ClientGameState {
 	myPlayerId: PlayerId
 	myHand: PlayerCardInstance[]
+	privateSelectedCardInstanceIds?: string[]
 	publicState: PublicGameState
 }
 

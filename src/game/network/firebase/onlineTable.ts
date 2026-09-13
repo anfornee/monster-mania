@@ -1,4 +1,6 @@
 import type { TableStatus } from '../protocol'
+import type { PublicGameState } from '../clientState'
+import type { OnlineGameEvent } from '../onlineGame'
 
 export type OnlineTableStatus = TableStatus
 export type OnlineTableRole = 'host' | 'guest'
@@ -13,6 +15,9 @@ export interface OnlineTable {
 	guestName: string | null
 	createdAtMs: number | null
 	updatedAtMs: number | null
+	revision: number | null
+	publicGameState: PublicGameState | null
+	lastGameEvent: OnlineGameEvent | null
 }
 
 export interface OnlineTableSession {
@@ -28,6 +33,10 @@ export type OnlineTableErrorCode =
 	| 'INVALID_PLAYER_NAME'
 	| 'INVALID_TABLE_DATA'
 	| 'SESSION_NOT_FOUND'
+	| 'GAME_NOT_READY'
+	| 'NOT_YOUR_TURN'
+	| 'STALE_REVISION'
+	| 'ILLEGAL_ACTION'
 	| 'FIREBASE_UNAVAILABLE'
 
 export class OnlineTableError extends Error {

@@ -1,128 +1,143 @@
 # Deployment
 
-Monster Mania is a Vite application hosted with Firebase Hosting. Firebase Anonymous Auth and Cloud Firestore also back the Online Table membership lobby. GitHub Actions verifies the app and Firestore rules, creates Hosting previews for pull requests, and updates the live site after changes reach `main`.
+Monster Mania deploys a Vite app, Cloud Firestore Rules/indexes, and 2nd gen Cloud Functions to Firebase project `monster-mania-aea35`. Firebase Anonymous Auth, Firestore, and Callable Functions back Online Tables. Production Hosting serves `dist/`, with an SPA rewrite to `/index.html`.
 
-## Hosting configuration
+## Pinned toolchain
 
-- **Firebase project:** `monster-mania-aea35`
-- **Build output:** `dist/`
-- **Hosting config:** `firebase.json`
-- **Project alias:** `.firebaserc`
-- **Application routing:** every unmatched path is rewritten to `/index.html`, so browser navigation and routes such as `/dev/rules` work after a refresh.
+Project commands intentionally use Node `22.23.2` from `.nvmrc` and npm `10.9.8` from `packageManager`/`engines`. The Functions runtime is Node 22. `firebase-tools` is pinned to `15.30.0` in the root lockfile; CI invokes infrastructure deployment through `npx --no-install` and gives the Hosting action the same explicit version. A global Firebase CLI is neither required nor used.
 
-The repository has no trusted gameplay runtime yet. Files in `public/` are copied into the production bundle by Vite and served by Firebase with their same public paths. Firebase Web SDK values are public client identifiers and are loaded from `VITE_FIREBASE_*` variables locally or Firebase Hosting's `/__/firebase/init.json`; never use a service-account credential in the browser bundle.
+The GitHub actions themselves use their current Node-24-compatible releases. That internal action runtime does not change the application's Node 22 runtime:
 
-## Automated deployments
+- `actions/checkout@v7`
+- `actions/setup-node@v7`
+- `actions/setup-java@v5`
+- `google-github-actions/auth@v3`
+- `FirebaseExtended/action-hosting-deploy@v0.11.0`
 
-Both deployment workflows install from the lockfile and require the same verification command to succeed:
+JDK 21 is selected in CI and is required locally for Firebase Emulator Suite tests.
 
-```bash
-npm ci
-npm run typecheck
-npm run lint
-npm test
-npm run test:firestore
-npm run build
-```
+## Reproducible verification
 
-The workflows select Node 22 from `.nvmrc` and Temurin JDK 21 so Firebase Emulator Suite behavior is consistent across developer machines and CI.
-
-The commands appear as one build step in GitHub Actions. If any command fails, Firebase deployment does not run.
-
-### Pull request previews
-
-`.github/workflows/firebase-hosting-pull-request.yml` runs for pull requests. In the normal repository flow, these are pull requests targeting `main`.
-
-After a successful build, Firebase creates or updates a temporary preview channel and reports its URL on the pull request. The workflow intentionally skips pull requests from forks because repository secrets are not exposed to forked workflows.
-
-The workflow currently listens to pull requests against any base branch. Add a `branches: [main]` filter under `pull_request` if previews should be limited strictly to pull requests targeting `main`.
-
-### Live deployment
-
-`.github/workflows/firebase-hosting-merge.yml` runs on every push to `main`, including a merged pull request. After the verification commands pass, it authenticates with the existing Firebase service-account secret, deploys repository-managed Firestore rules and indexes, and then deploys the `dist/` bundle to Firebase's `live` Hosting channel. A failed Firestore deployment prevents the Hosting release so the client and its required access policy cannot drift apart.
-
-The expected public Firebase URL is:
-
-```text
-https://monster-mania-aea35.web.app
-```
-
-Firebase may also expose the equivalent `firebaseapp.com` hostname or a configured custom domain.
-
-## GitHub repository setup
-
-The workflows depend on:
-
-- the built-in `GITHUB_TOKEN`, used to report deployment status and preview details;
-- the repository secret `FIREBASE_SERVICE_ACCOUNT_MONSTER_MANIA_AEA35`, used to authenticate Firebase Hosting deployments.
-
-Do not commit the service-account JSON or copy its value into documentation. If the Firebase project is reconnected to GitHub, confirm that the generated secret name still matches both workflow files.
-
-The service account also needs permission to create/release Firebase Rules rulesets and manage Firestore indexes. If the new infrastructure step reports an IAM denial, grant that deployment identity Firebase Rules Admin and Cloud Datastore Index Admin access in project `monster-mania-aea35`; do not broaden the browser application's permissions or place this credential in a `VITE_*` variable.
-
-## Local production check
-
-Run the same checks before opening or merging a pull request:
-
-```bash
-npm ci
-npm run typecheck
-npm run lint
-npm test
-npm run test:firestore
-npm run build
-npm run preview
-```
-
-Open the URL printed by Vite and verify at least:
-
-- the landing page loads without missing artwork;
-- a Solo Game starts and can be resumed;
-- `/dev/rules` loads directly and survives a browser refresh;
-- the browser console has no asset or manifest errors.
-
-## Firestore configuration and deployment
-
-The repository owns `firestore.rules`, `firestore.indexes.json`, and their `firebase.json` entries. The initial lobby requires no composite indexes. Run security tests before deploying either file:
+Run from a clean checkout/dependency state:
 
 ```bash
 nvm install
 nvm use
 npm ci
-npm run test:firestore
-npx firebase-tools deploy --only firestore:rules,firestore:indexes --project monster-mania-aea35
-```
-
-The emulator requires JDK 21 or newer. Anonymous Authentication is enabled through Firebase Console. Firebase CLI 15.30.0 does not support Authentication provider declarations in `firebase.json`, so there is no repository-side Auth provider deployment command. Do not add an unsupported `auth` block to that file.
-
-App Check enforcement is intentionally deferred until online gameplay is functional and verified. See [Firebase Online Table lobby foundation](08-firebase-online-lobby.md).
-
-## Manual Hosting deployment
-
-Automated GitHub deployment is the normal release path. If a manual deployment is required, install and authenticate the Firebase CLI, build the exact commit to release, and deploy only Hosting:
-
-```bash
-npm ci
+npm ci --prefix functions
 npm run typecheck
 npm run lint
 npm test
+npm run test:functions
 npm run test:firestore
 npm run build
-firebase deploy --only hosting --project monster-mania-aea35
 ```
 
-Use manual live deployment deliberately: it can publish code that has not passed through the repository's pull-request history.
+The root and `functions/` directories intentionally have separate lockfiles. Do not delete either lockfile for normal installation; use `npm ci`. Use `npm install` only when intentionally changing dependencies, then review both manifest and lockfile changes.
 
-## Static assets and caching
+## GitHub deployment identity and the Rules 403
 
-Firebase serves the files emitted into `dist/`. Vite fingerprints imported JavaScript and CSS bundles, while files copied from `public/` keep stable names. The game appends its own asset version to preloaded game-art requests; when replacing an image at the same public path, bump `GAME_ASSET_VERSION` in `src/game/assets/assetVersion.ts` as described in [Asset loading and cache strategy](07-asset-loading-and-cache-strategy.md).
+The workflows do not contain Workload Identity Federation configuration. Both use the service-account JSON stored in repository secret `FIREBASE_SERVICE_ACCOUNT_MONSTER_MANIA_AEA35`; therefore the authenticated principal is the JSON key's `client_email`. Secret values are intentionally unavailable from a checkout, so its exact email cannot be truthfully derived here. The merge workflow now prints only that non-secret `client_email` as `Authenticated principal:` immediately after authentication. Copy that value from the next Actions run (or inspect the secret JSON locally without committing it) before applying IAM commands.
 
-There are currently no custom Firebase `Cache-Control` headers and no service worker. Add either only as an intentional cache-policy change and test both fresh loads and upgrades from a previously deployed version.
+The failed request was the Firebase CLI's Rules compilation/test operation:
 
-## Troubleshooting
+```text
+POST firebaserules.googleapis.com/v1/projects/monster-mania-aea35:test
+```
 
-- **The PR job is skipped:** confirm the pull request branch belongs to this repository rather than a fork.
-- **Authentication fails:** confirm `FIREBASE_SERVICE_ACCOUNT_MONSTER_MANIA_AEA35` exists in GitHub Actions secrets and belongs to the configured Firebase project.
-- **The deploy step never starts:** inspect the preceding build step; type checking, linting, tests, and bundling must all pass.
-- **A refreshed route returns the app but renders incorrectly:** Firebase's SPA rewrite is active, so check the client-side route and browser console.
-- **Artwork looks stale:** confirm the replacement asset was committed and `GAME_ASSET_VERSION` was bumped when the public path stayed the same.
+Its missing permission is `firebaserules.rulesets.test`. `roles/firebaserules.admin` is the narrow predefined Firebase role covering ruleset test, create, and release operations. The same deploy identity also needs `roles/datastore.indexAdmin` for Firestore indexes and `roles/cloudfunctions.admin` for Functions deployment. Do not grant Project Owner.
+
+An IAM administrator should replace `DEPLOYER_EMAIL` with the workflow-reported principal and run:
+
+```bash
+gcloud projects add-iam-policy-binding monster-mania-aea35 \
+  --member="serviceAccount:DEPLOYER_EMAIL" \
+  --role="roles/firebaserules.admin"
+gcloud projects add-iam-policy-binding monster-mania-aea35 \
+  --member="serviceAccount:DEPLOYER_EMAIL" \
+  --role="roles/datastore.indexAdmin"
+gcloud projects add-iam-policy-binding monster-mania-aea35 \
+  --member="serviceAccount:DEPLOYER_EMAIL" \
+  --role="roles/cloudfunctions.admin"
+```
+
+2nd gen deployment also requires the deployer to act as the selected Functions runtime and build service accounts. Grant `roles/iam.serviceAccountUser` on those service accounts, not across the whole project. Determine the project number and default build account, then run the resource-scoped bindings:
+
+```bash
+gcloud projects describe monster-mania-aea35 --format="value(projectNumber)"
+gcloud builds get-default-service-account --project=monster-mania-aea35
+
+gcloud iam service-accounts add-iam-policy-binding RUNTIME_SERVICE_ACCOUNT \
+  --project=monster-mania-aea35 \
+  --member="serviceAccount:DEPLOYER_EMAIL" \
+  --role="roles/iam.serviceAccountUser"
+gcloud iam service-accounts add-iam-policy-binding BUILD_SERVICE_ACCOUNT \
+  --project=monster-mania-aea35 \
+  --member="serviceAccount:DEPLOYER_EMAIL" \
+  --role="roles/iam.serviceAccountUser"
+gcloud projects add-iam-policy-binding monster-mania-aea35 \
+  --member="serviceAccount:BUILD_SERVICE_ACCOUNT" \
+  --role="roles/cloudbuild.builds.builder"
+```
+
+For Console-only setup, open Google Cloud Console > IAM & Admin > IAM for `monster-mania-aea35`, locate the workflow-reported principal, and add Firebase Rules Admin, Cloud Datastore Index Admin, and Cloud Functions Admin. Then open IAM & Admin > Service Accounts, grant that principal Service Account User on the runtime and build accounts, and confirm the build account itself has Cloud Build Service Account.
+
+The project/API service agents may require their standard service-agent roles if those were manually removed; do not assign those roles to the GitHub deployer. The deployer may retain its existing Hosting role used by `action-hosting-deploy`.
+
+No IAM change is considered fixed until the merge deployment succeeds. The current local Google Cloud user needs an interactive `gcloud auth login` before it can inspect or change project policy, so this repository change does not claim IAM was performed.
+
+## Automated deployment
+
+The pull-request workflow installs both lockfiles and runs all verification, then publishes a Hosting preview for non-fork branches. The merge workflow repeats verification, authenticates, reports the principal, deploys Functions/Rules/indexes together, and only then updates the live Hosting channel. An infrastructure failure prevents the web client from getting ahead of its required backend.
+
+Expected Hosting URL:
+
+```text
+https://monster-mania-aea35.web.app
+```
+
+Anonymous Authentication remains a one-time Firebase Console setting; Firebase CLI `15.30.0` has no supported `firebase.json` declaration for enabling that provider.
+
+## Manual deployment
+
+Automated deployment is preferred. After all verification passes, an authenticated operator may deploy the exact checked-out commit with the repository-pinned CLI:
+
+```bash
+npm ci
+npm ci --prefix functions
+npm run typecheck
+npm run lint
+npm test
+npm run test:functions
+npm run test:firestore
+npm run build
+npx --no-install firebase deploy --only functions,firestore:rules,firestore:indexes,hosting --project monster-mania-aea35
+```
+
+Never place service-account JSON in the browser bundle or a `VITE_*` variable.
+
+## Live Online Table verification
+
+Following a successful deployment, use two separate browser profiles so each gets a different anonymous UID. Verify:
+
+- Host creates a Table and Guest joins by code; a third identity is rejected.
+- Exactly one revision-0 match appears, with the same public state for both players.
+- Each profile can see its own hand and cannot read the opponent private document.
+- Legal Host and Guest actions propagate in both directions; pending controls remain blocked until authority responds.
+- Opponent card/discard reveals, Monster defeat announcements, blocking timing, and turn transitions play locally from authoritative events.
+- Refresh during an active match restores the same seat, state, and revision without redealing.
+- A stale command is rejected and an exact duplicate command does not advance revision twice.
+- Play continues through forced discard, Actions, Black Hole, hand limits, final-three/Sudden Death behavior as reached, and a valid winner; both clients agree on final state.
+
+Record the deployed Functions revision and test result. Until this checklist includes a complete live match, Online gameplay is emulator-verified only.
+
+## Static assets and troubleshooting
+
+Vite fingerprints imported JS/CSS. Files copied from `public/` keep stable paths; bump `GAME_ASSET_VERSION` when replacing an image at the same public path. There is currently no service worker or custom Firebase cache policy.
+
+- Rules deployment 403: confirm the printed principal and `roles/firebaserules.admin` binding.
+- Index deployment denied: confirm `roles/datastore.indexAdmin`.
+- Functions deployment denied: confirm Cloud Functions Admin and resource-scoped Service Account User bindings, plus required APIs.
+- Emulator startup fails: confirm JDK 21+ is active.
+- Authentication fails: confirm the repository secret exists, is valid JSON, and belongs to this project.
+- Artwork looks stale: review the asset-version bump and browser cache.

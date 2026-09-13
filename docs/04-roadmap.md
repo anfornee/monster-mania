@@ -51,7 +51,7 @@ Establish the product and integration seam without pretending that live multipla
 - realtime lobby updates and browser-local refresh restoration
 - deny-by-default Firestore rules and emulator coverage
 
-This phase now provides a real cross-browser membership lobby, but not synchronized turns. The in-memory service remains authoritative only within one process and proves how shared-engine actions and filtered player views work. Firestore clients cannot write game state.
+This phase provides the cross-browser membership lobby. Firestore clients cannot write game state.
 
 ## Phase 4 — Functional Online Tables
 
@@ -59,7 +59,7 @@ Goal: two people play from separate browsers/devices in a private Table using th
 
 ### Transport adapter around the authoritative service
 
-The Table service owns complete `GameState`. Add a server transport that lets clients submit a `GameAction`, never a modified state.
+The Table service owns complete `GameState`. The implemented Firebase transport lets clients submit a `GameAction`, never modified state.
 
 For each request, the service:
 
@@ -97,9 +97,9 @@ The exact type may evolve. The invariant may not: one browser must never receive
 
 ### Transport and storage decision
 
-Firebase is selected for anonymous identity, lobby persistence, and realtime membership. Select a trusted execution layer for gameplay commands—such as Cloud Functions/Run or a deliberately hosted TypeScript service—without granting browsers authority to write complete state.
+Firebase Anonymous Auth, Firestore, and 2nd gen Callable Functions are selected. Functions reuse the shared engine and transactionally persist one authoritative revision plus separately filtered public/private snapshots without granting browsers authority to write complete state.
 
-Evaluate options against:
+The implementation is locally/emulator verified. Production deployment and a complete live two-browser match remain the completion gate. Continue evaluating operational changes against:
 
 - deployment and hosting fit
 - atomic action updates/concurrency control
@@ -180,4 +180,4 @@ Avoid a collectible deck-builder until the product actually needs one.
 
 ## Guiding rule
 
-Finish and protect the Solo game first. Keep the Online Table skeleton explicit and replaceable. Add real multiplayer only behind an authoritative, privacy-preserving service that reuses the tested engine.
+Protect the Solo game while finishing Online Table production verification. Keep multiplayer behind the authoritative, privacy-preserving service that reuses the tested engine.

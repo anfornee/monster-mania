@@ -4,9 +4,9 @@
 >
 > **Stack:** Vite + React + TypeScript
 >
-> **MVP direction:** playable Solo Game plus a Firebase-backed Online Table lobby
+> **MVP direction:** playable Solo Game plus an authoritative Firebase-backed Online Table
 >
-> **Later:** authoritative two-browser Tables, persistence, reconnect, responsive polish, and expansion content
+> **Later:** production hardening, presence/expiration, responsive polish, and expansion content
 
 ## 1. Product goal
 
@@ -29,24 +29,27 @@ The playable MVP mode has exactly two participants:
 
 The first computer strategy can be simple and deterministic: play useful Draw Actions, prefer the highest-point normally beatable Monster, save the Ultimate Weapon when a normal defeat is available, use it on the highest-value eligible target otherwise, and skip when no defeat is available.
 
-### Online Table foundation
+### Online Table
 
-The MVP also establishes product language and boundaries for a future private **Online Table**:
+The MVP establishes a private **Online Table**:
 
 - create a Firestore-backed Table after silently establishing anonymous identity
 - display a short Table code
 - transactionally join from another browser
 - realtime waiting/membership states and browser-local refresh restoration
 - transport-neutral request, response, and player-view types
-- an in-memory authoritative Table service with two seats and opaque seat tokens
-- action, membership, turn, post-state, and private-view validation at the service boundary
+- repository-managed 2nd gen Callable Functions on Node 22
+- idempotent trusted match initialization after both seats fill
+- transactionally revisioned `GameAction` commands through the shared engine
+- server-only complete state, shared public state, and UID-keyed private views
+- local presentation driven by authoritative per-revision events
 
-This is a functional cross-browser lobby, not live gameplay. Firebase Anonymous Auth and Firestore synchronize the two seats, while the in-memory service remains the proof for authoritative shared-engine actions and private views. There is currently no trusted deployed gameplay command handler, persisted authoritative `GameState`, presence/expiration policy, or full-match reconnect support. UI copy must say **Table**, never Room.
+The gameplay path is locally implemented and emulator-verified through a complete deterministic match. It is not production-verified until Functions/Rules/indexes deploy and a complete live two-browser match succeeds. Presence/expiration, automatic cleanup, App Check, and cross-device recovery remain deferred. UI copy must say **Table**, never Room.
 
 ### Not in the current playable MVP
 
 - local pass-and-play
-- working two-browser Online Table matches beyond membership
+- public production readiness for Online Tables before live verification/hardening
 - public matchmaking
 - accounts or cloud saves
 - spectators
@@ -79,8 +82,8 @@ The exact number of 1-, 2-, and 3-point Monsters is not an engine invariant. A f
 ## 4. Architecture
 
 ```text
-Solo UI / computer --------> GameAction --------> deterministic engine
-future network transport --> Table service -----> deterministic engine
+Solo UI / computer -------> GameAction ----------> deterministic engine
+Firebase callable -------> Table transaction ---> deterministic engine
                                                     |    |       |
                                              definitions selectors validator
                                                     |
@@ -119,7 +122,8 @@ src/game/ai/             replaceable computer strategy (MVP milestone)
 src/game/serialization/  schema-versioned local game storage
 src/game/presentation/   player profile, UI timing, and event-derived announcements
 src/game/assets/         asset manifest, cache versioning, and runtime preloading
-src/game/network/        Online Table protocol, private views, in-memory authority, and Firebase lobby
+src/game/network/        Online Table protocol, authority, private views, and Firebase client
+functions/               Firebase trusted initialization and command transactions
 src/game/sandbox/        deterministic scenario builders
 src/components/          React presentation as the board is built
 public/assets/           browser-served card and branding assets
@@ -150,7 +154,7 @@ interface PlayerGameView {
 
 Solo save/resume uses `localStorage`, a schema version, stable definition IDs, and state validation during restore. Incompatible or invalid saves fail safely rather than crashing or entering an impossible game state.
 
-Online Table lobby membership is stored in Firestore, while `localStorage` retains only a Table reference and Firebase Auth persists the browser-local anonymous UID. Authoritative gameplay persistence is still a different boundary: the in-memory gameplay service loses state on restart, and a future trusted adapter must provide durable state, private player views, revisions, and concurrency control.
+Online Table membership and gameplay snapshots are stored in Firestore, while `localStorage` retains only a Table reference and Firebase Auth persists the browser-local anonymous UID. Complete authoritative state is server-only; shared and UID-private documents use matching revisions so a reconnect can rebuild only that player's permitted view.
 
 ## 8. Assets
 
@@ -179,5 +183,5 @@ The Solo board uses controller-neutral player seats around a shared table. Card 
 - Validate state after actions in tests and development paths.
 - Test behavior and invariants rather than only rendered output.
 - Add cards through definitions and generic effects.
-- Keep Online Table types transport-neutral until a backend is deliberately selected.
+- Keep the shared Online Table authority provider-neutral; Firebase-specific calls stay in the adapter and Functions repository.
 - Do not label online play complete until two clients can use an authoritative service without receiving each other's private hands.

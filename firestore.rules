@@ -132,8 +132,13 @@ service cloud.firestore {
         allow read: if signedIn()
           && request.auth.uid == uid
           && participant(get(/databases/$(database)/documents/tables/$(tableId)).data);
-        // Authoritative gameplay storage is intentionally deferred.
+        // Only the Admin SDK writes player-private gameplay snapshots.
         allow write: if false;
+      }
+
+      match /authority/{document} {
+        // Complete GameState is server-only and is never readable by browsers.
+        allow read, write: if false;
       }
 
       match /{document=**} {
