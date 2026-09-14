@@ -2,10 +2,13 @@ import {
 	collection,
 	doc,
 	getDoc,
+	limit,
 	onSnapshot,
+	query,
 	runTransaction,
 	serverTimestamp,
 	Timestamp,
+	where,
 	type DocumentData,
 	type DocumentSnapshot,
 	type Firestore,
@@ -32,6 +35,8 @@ import {
 	type OnlineTable,
 	type OnlineTableRole,
 	type OnlineTableSession,
+	type OnlineTableVisibility,
+	type PublicOnlineTable,
 } from './onlineTable'
 
 interface FirestoreTableClientOptions {
@@ -80,6 +85,7 @@ function tableFromSnapshot(snapshot: DocumentSnapshot<DocumentData>): OnlineTabl
 		data.schemaVersion !== 1
 		|| typeof data.joinCode !== 'string'
 		|| !isValidTableCode(data.joinCode)
+		|| (data.visibility !== undefined && !['private', 'public'].includes(data.visibility))
 		|| !['waiting', 'playing', 'finished'].includes(data.status)
 		|| typeof data.hostUid !== 'string'
 		|| typeof data.hostName !== 'string'
@@ -91,6 +97,7 @@ function tableFromSnapshot(snapshot: DocumentSnapshot<DocumentData>): OnlineTabl
 	return {
 		id: snapshot.id,
 		joinCode: data.joinCode,
+		visibility: data.visibility === 'public' ? 'public' : 'private',
 		status: data.status,
 		hostUid: data.hostUid,
 		hostName: data.hostName,
@@ -170,10 +177,23 @@ function normalizeFirebaseError(error: unknown): never {
 	)
 }
 
+function tableListenerError(error: unknown, fallback: string): OnlineTableError {
+	const code = error && typeof error === 'object' && 'code' in error
+		? (error as { code?: unknown }).code
+		: null
+	return code === 'permission-denied'
+		? new OnlineTableError('TABLE_NOT_FOUND', 'This Table was closed by a player.')
+		: new OnlineTableError('FIREBASE_UNAVAILABLE', fallback)
+}
+
 export interface OnlineTableClient {
-	createTable: (uid: string, playerName: string) => Promise<OnlineTableSession>
+	createTable: (uid: string, playerName: string, visibility?: OnlineTableVisibility) => Promise<OnlineTableSession>
 	joinTable: (uid: string, playerName: string, joinCode: string) => Promise<OnlineTableSession>
 	resumeTable: (uid: string, tableId: string) => Promise<OnlineTableSession>
+	watchPublicTables: (
+		onTables: (tables: PublicOnlineTable[]) => void,
+		onError: (error: OnlineTableError) => void,
+	) => Unsubscribe
 	watchTable: (
 		tableId: string,
 		uid: string,
@@ -182,6 +202,7 @@ export interface OnlineTableClient {
 	) => Unsubscribe
 	initializeGame: (tableId: string) => Promise<number>
 	requestRematch: (tableId: string) => Promise<number>
+	leaveTable: (tableId: string) => Promise<void>
 	submitAction: (tableId: string, expectedRevision: number, action: GameAction) => Promise<number>
 	watchGame: (
 		tableId: string,
@@ -202,8 +223,15 @@ export class FirestoreTableClient implements OnlineTableClient {
 		this.functions = options.functions ?? null
 	}
 
-	async createTable(uid: string, playerName: string): Promise<OnlineTableSession> {
+	async createTable(
+		uid: string,
+		playerName: string,
+		visibility: OnlineTableVisibility = 'private',
+	): Promise<OnlineTableSession> {
 		const hostName = cleanPlayerName(playerName)
+		if (visibility !== 'private' && visibility !== 'public') {
+			throw new OnlineTableError('INVALID_TABLE_DATA', 'Choose a valid Table visibility.')
+		}
 		const tableRef = doc(collection(this.firestore, 'tables'))
 		for (let attempt = 0; attempt < MAX_CODE_ATTEMPTS; attempt += 1) {
 			const joinCode = normalizeTableCode(this.createCode())
@@ -217,6 +245,7 @@ export class FirestoreTableClient implements OnlineTableClient {
 					transaction.set(tableRef, {
 						schemaVersion: 1,
 						joinCode,
+						visibility,
 						status: 'waiting',
 						hostUid: uid,
 						hostName,
@@ -304,6 +333,9 @@ export class FirestoreTableClient implements OnlineTableClient {
 			const table = tableFromSnapshot(await getDoc(doc(this.firestore, 'tables', tableId)))
 			return { table, role: roleFor(table, uid) }
 		} catch (error) {
+			if (error && typeof error === 'object' && 'code' in error && error.code === 'permission-denied') {
+				throw new OnlineTableError('TABLE_NOT_FOUND', 'This Table was closed by a player.')
+			}
 			normalizeFirebaseError(error)
 		}
 	}
@@ -324,7 +356,33 @@ export class FirestoreTableClient implements OnlineTableClient {
 					onError(error instanceof OnlineTableError ? error : new OnlineTableError('INVALID_TABLE_DATA', 'The Table update was invalid.'))
 				}
 			},
-			() => onError(new OnlineTableError('FIREBASE_UNAVAILABLE', 'Live Table updates were interrupted.')),
+			(watchError) => onError(tableListenerError(watchError, 'Live Table updates were interrupted.')),
+		)
+	}
+
+	watchPublicTables(
+		onTables: (tables: PublicOnlineTable[]) => void,
+		onError: (error: OnlineTableError) => void,
+	): Unsubscribe {
+		const openTables = query(
+			collection(this.firestore, 'tables'),
+			where('visibility', '==', 'public'),
+			where('status', '==', 'waiting'),
+			where('guestUid', '==', null),
+			limit(20),
+		)
+		return onSnapshot(
+			openTables,
+			(snapshot) => onTables(snapshot.docs
+				.map((document) => tableFromSnapshot(document))
+				.map((table) => ({
+					id: table.id,
+					joinCode: table.joinCode,
+					hostName: table.hostName,
+					createdAtMs: table.createdAtMs,
+				}))
+				.sort((left, right) => (left.createdAtMs ?? 0) - (right.createdAtMs ?? 0))),
+			() => onError(new OnlineTableError('FIREBASE_UNAVAILABLE', 'Open Table updates were interrupted.')),
 		)
 	}
 
@@ -349,6 +407,19 @@ export class FirestoreTableClient implements OnlineTableClient {
 				'requestOnlineRematch',
 			)
 			return (await callable({ tableId })).data.revision
+		} catch (error) {
+			this.normalizeGameError(error)
+		}
+	}
+
+	async leaveTable(tableId: string): Promise<void> {
+		if (!this.functions) throw new OnlineTableError('FIREBASE_UNAVAILABLE', 'Firebase Functions are unavailable.')
+		try {
+			const callable = httpsCallable<{ tableId: string }, { removed: boolean }>(
+				this.functions,
+				'leaveOnlineTable',
+			)
+			await callable({ tableId })
 		} catch (error) {
 			this.normalizeGameError(error)
 		}
@@ -410,7 +481,7 @@ export class FirestoreTableClient implements OnlineTableClient {
 					onError(error instanceof OnlineTableError ? error : new OnlineTableError('INVALID_TABLE_DATA', 'The game update was invalid.'))
 				}
 			},
-			() => onError(new OnlineTableError('FIREBASE_UNAVAILABLE', 'Shared game updates were interrupted.')),
+			(watchError) => onError(tableListenerError(watchError, 'Shared game updates were interrupted.')),
 		)
 		const unsubscribePrivate = onSnapshot(
 			doc(this.firestore, 'tables', tableId, 'private', uid),
@@ -418,7 +489,7 @@ export class FirestoreTableClient implements OnlineTableClient {
 				privateState = readPrivateGameState(snapshot.data())
 				publish()
 			},
-			() => onError(new OnlineTableError('FIREBASE_UNAVAILABLE', 'Private game updates were interrupted.')),
+			(watchError) => onError(tableListenerError(watchError, 'Private game updates were interrupted.')),
 		)
 		return () => {
 			unsubscribeTable()
@@ -437,6 +508,8 @@ export class FirestoreTableClient implements OnlineTableClient {
 		if (reason === 'GAME_NOT_STARTED') throw new OnlineTableError('GAME_NOT_READY', 'The match is still initializing.')
 		if (reason === 'GAME_FINISHED') throw new OnlineTableError('TABLE_FINISHED', 'This match has finished.')
 		if (reason === 'REMATCH_NOT_AVAILABLE') throw new OnlineTableError('REMATCH_NOT_AVAILABLE', 'A rematch is only available after the match finishes.')
+		if (reason === 'TABLE_NOT_FOUND') throw new OnlineTableError('TABLE_NOT_FOUND', 'This Table no longer exists.')
+		if (reason === 'NOT_A_PARTICIPANT') throw new OnlineTableError('SESSION_NOT_FOUND', 'This browser does not hold a seat at that Table.')
 		normalizeFirebaseError(error)
 	}
 }

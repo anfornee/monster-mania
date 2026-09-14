@@ -23,15 +23,16 @@ service cloud.firestore {
       let code = getAfter(/databases/$(database)/documents/tableCodes/$(data.joinCode)).data;
       return signedIn()
         && data.keys().hasAll([
-          'schemaVersion', 'joinCode', 'status', 'hostUid', 'hostName',
+          'schemaVersion', 'joinCode', 'visibility', 'status', 'hostUid', 'hostName',
           'guestUid', 'guestName', 'createdAt', 'updatedAt'
         ])
         && data.keys().hasOnly([
-          'schemaVersion', 'joinCode', 'status', 'hostUid', 'hostName',
+          'schemaVersion', 'joinCode', 'visibility', 'status', 'hostUid', 'hostName',
           'guestUid', 'guestName', 'createdAt', 'updatedAt'
         ])
         && data.schemaVersion == 1
         && validCode(data.joinCode)
+        && data.visibility in ['private', 'public']
         && data.status == 'waiting'
         && data.hostUid == request.auth.uid
         && validName(data.hostName)
@@ -123,7 +124,10 @@ service cloud.firestore {
         participant(resource.data)
         || (resource.data.status == 'waiting' && resource.data.guestUid == null)
       );
-      allow list: if false;
+      allow list: if signedIn()
+        && resource.data.visibility == 'public'
+        && resource.data.status == 'waiting'
+        && resource.data.guestUid == null;
       allow create: if validTableCreate(tableId);
       allow update: if validGuestClaim(tableId);
       allow delete: if false;

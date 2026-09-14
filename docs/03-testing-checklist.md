@@ -253,6 +253,14 @@ The following checks belong to the later transport/persistence milestone and mus
 - [ ] Accepted actions synchronize both clients
 - [ ] Stale or simultaneous actions cannot both commit
 - [ ] Reconnect recovers the same seat without duplicating a participant
+- [ ] Public discovery returns only public, waiting Tables with an empty guest seat
+- [ ] Joining from the public list uses the same atomic claim as joining by code
+- [ ] A private Table never appears in collection results
+- [ ] A rematch request updates the opponent's UI with Accept and Walk Away choices
+- [ ] A rematch starts exactly once only after both players consent
+- [ ] Either participant can explicitly leave before or after a rematch request
+- [ ] Explicit leave deletes the code, Table, authority state, and both private views
+- [ ] The remaining participant observes closure and clears its stored session
 - [ ] Expired Tables and process restarts follow the documented persistence policy
 - [ ] Neither client payload contains the opponent's private hand
 

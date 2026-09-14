@@ -31,10 +31,11 @@ The first computer strategy can be simple and deterministic: play useful Draw Ac
 
 ### Online Table
 
-The MVP establishes a private **Online Table**:
+The MVP establishes an authoritative **Online Table**:
 
-- create a Firestore-backed Table after silently establishing anonymous identity
-- display a short Table code
+- create a private or publicly discoverable Firestore-backed Table after silently establishing anonymous identity
+- display a short Table code for direct invitations
+- list public waiting Tables so another hunter can join without entering a code
 - transactionally join from another browser
 - realtime waiting/membership states and browser-local refresh restoration
 - transport-neutral request, response, and player-view types
@@ -43,14 +44,14 @@ The MVP establishes a private **Online Table**:
 - transactionally revisioned `GameAction` commands through the shared engine
 - server-only complete state, shared public state, and UID-keyed private views
 - local presentation driven by authoritative per-revision events
+- coordinated rematch request/acceptance plus explicit leave cleanup for both players
 
-The gameplay path is locally implemented and emulator-verified through a complete deterministic match. It is not production-verified until Functions/Rules/indexes deploy and a complete live two-browser match succeeds. Presence/expiration, automatic cleanup, App Check, and cross-device recovery remain deferred. UI copy must say **Table**, never Room.
+The gameplay path is locally implemented and emulator-verified through a complete deterministic match. It is not production-verified until Functions/Rules/indexes deploy and a complete live two-browser match succeeds. Explicit leave removes a Table and ejects the remaining player; disconnect detection, abandoned-session expiration, App Check, and cross-device recovery remain deferred. UI copy must say **Table**, never Room.
 
 ### Not in the current playable MVP
 
 - local pass-and-play
 - public production readiness for Online Tables before live verification/hardening
-- public matchmaking
 - accounts or cloud saves
 - spectators
 - sophisticated AI

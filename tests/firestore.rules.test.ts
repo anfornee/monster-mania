@@ -5,7 +5,17 @@ import {
 	initializeTestEnvironment,
 	type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing'
-import { doc, getDoc, setDoc, updateDoc, type Firestore } from 'firebase/firestore'
+import {
+	collection,
+	doc,
+	getDoc,
+	getDocs,
+	query,
+	setDoc,
+	updateDoc,
+	where,
+	type Firestore,
+} from 'firebase/firestore'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { FirestoreTableClient } from '../src/game/network/firebase/firestoreTableClient'
 import { OnlineTableError } from '../src/game/network/firebase/onlineTable'
@@ -72,6 +82,22 @@ describeWithEmulator('Firestore Online Table security rules', () => {
 		await assertSucceeds(getDoc(doc(firestoreFor('guest-b'), 'tables', created.table.id, 'private', 'guest-b')))
 		await assertFails(getDoc(doc(firestoreFor('host-a'), 'tables', created.table.id, 'private', 'guest-b')))
 		await assertFails(getDoc(doc(firestoreFor('guest-b'), 'tables', created.table.id, 'private', 'host-a')))
+	})
+
+	it('lists only public waiting Tables to signed-in players', async () => {
+		await clientFor('host-a', 'PX7KQ').createTable('host-a', 'Public Host', 'public')
+		await clientFor('host-b', 'QY8LR').createTable('host-b', 'Private Host', 'private')
+		const browser = firestoreFor('guest-c')
+		const publicQuery = query(
+			collection(browser, 'tables'),
+			where('visibility', '==', 'public'),
+			where('status', '==', 'waiting'),
+			where('guestUid', '==', null),
+		)
+		const openTables = await assertSucceeds(getDocs(publicQuery))
+		expect(openTables.docs.map((table) => table.data().hostName)).toEqual(['Public Host'])
+		await assertFails(getDocs(collection(browser, 'tables')))
+		await assertFails(getDocs(query(collection(browser, 'tables'), where('visibility', '==', 'private'))))
 	})
 
 	it('reserves authoritative gameplay writes and authority reads for server credentials', async () => {

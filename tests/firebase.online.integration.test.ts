@@ -107,5 +107,21 @@ describeWithEmulators('Firebase callable Online Table', () => {
 		const secondAction: GameAction = { type: 'SKIP_TURN', playerId: secondActor }
 		await expect(secondClient.submitAction(created.table.id, 1, secondAction)).resolves.toBe(2)
 		await expect(secondUpdate).resolves.toMatchObject({ revision: 2 })
+
+		const hostObservedClosure = new Promise<void>((resolve, reject) => {
+			let unsubscribe = () => {}
+			unsubscribe = hostClient.watchTable(
+				created.table.id,
+				hostUid,
+				() => undefined,
+				(closureError) => {
+					unsubscribe()
+					if (closureError.code === 'TABLE_NOT_FOUND') resolve()
+					else reject(closureError)
+				},
+			)
+		})
+		await expect(guestClient.leaveTable(created.table.id)).resolves.toBeUndefined()
+		await expect(hostObservedClosure).resolves.toBeUndefined()
 	}, 30_000)
 })

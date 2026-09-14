@@ -3,8 +3,8 @@
 The Online Table architecture now has three complementary layers:
 
 - `src/game/network/` contains the provider-neutral authoritative gameplay proof: short codes, protocol types, seat-token authorization, the two-seat in-memory service, shared-engine action handling, validation, and private client views.
-- `src/game/network/firebase/` plus `OnlineLobby.tsx` provide Firebase anonymous identity, atomic membership, Callable Function commands, revision-matched public/private listeners, refresh restoration, and the existing board presentation.
-- `functions/` provides the trusted Node 22 runtime: idempotent initialization, authenticated commands, shared-engine validation, transactional revisions, and separate public/private writes.
+- `src/game/network/firebase/` plus `OnlineLobby.tsx` provide Firebase anonymous identity, private/public creation, constrained open-Table discovery, atomic membership, Callable Function commands, revision-matched public/private listeners, refresh restoration, and the existing board presentation.
+- `functions/` provides the trusted Node 22 runtime: idempotent initialization, authenticated commands, shared-engine validation, transactional revisions, separate public/private writes, and participant-triggered cleanup.
 
 The authoritative path is implemented and verified locally with unit and Firestore emulator tests, including a complete deterministic match and coordinated rematch requests. It has not yet passed production deployment or a full live two-browser rematch flow. Firestore clients cannot write `GameState`; private subdocuments are read-own/write-none.
 
@@ -30,4 +30,4 @@ Before claiming online gameplay is production-ready, verify in two live browsers
 - both clients reach and agree on one valid final winner;
 - both clients can request a rematch and observe one fresh authoritative match only after both consent.
 
-Presence, expiration/cleanup, rate limiting, App Check enforcement, and cross-device account recovery remain later hardening work.
+Disconnect presence, abandoned-Table expiration, rate limiting, App Check enforcement, and cross-device account recovery remain later hardening work. Explicit **Leave Table** and **Walk Away** actions already clean up the full Table and eject the remaining participant.

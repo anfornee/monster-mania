@@ -9,6 +9,7 @@ import {
 } from '../../src/game/network/authoritativeOnlineGame'
 import {
 	initializeMatchForTable,
+	leaveTableForParticipant,
 	requestRematchForTable,
 	submitCommandForTable,
 } from './onlineGameRepository'
@@ -49,21 +50,26 @@ function authenticatedUid(auth: { uid: string } | undefined): string {
 	return auth.uid
 }
 
+function tableIdFrom(value: unknown): string {
+	const data = value as { tableId?: unknown } | null
+	if (!data || typeof data.tableId !== 'string' || !data.tableId || data.tableId.length > 128) {
+		throw new OnlineAuthorityError('INVALID_ARGUMENT', 'A valid Table ID is required.')
+	}
+	return data.tableId
+}
+
 export const initializeOnlineGame = onCall(
 	{ invoker: 'public' },
 	async (request) => {
 		try {
 			const uid = authenticatedUid(request.auth)
-			const data = request.data as { tableId?: unknown } | null
-			if (!data || typeof data.tableId !== 'string' || !data.tableId || data.tableId.length > 128) {
-				throw new OnlineAuthorityError('INVALID_ARGUMENT', 'A valid Table ID is required.')
-			}
-			const table = await database.doc(`tables/${data.tableId}`).get()
+			const tableId = tableIdFrom(request.data)
+			const table = await database.doc(`tables/${tableId}`).get()
 			const tableData = table.data()
 			if (!tableData || (tableData.hostUid !== uid && tableData.guestUid !== uid)) {
 				throw new OnlineAuthorityError('NOT_A_PARTICIPANT', 'This identity does not hold a seat at the Table.')
 			}
-			return await initializeMatchForTable(database, data.tableId)
+			return await initializeMatchForTable(database, tableId)
 		} catch (error) {
 			callableError(error)
 		}
@@ -88,11 +94,22 @@ export const requestOnlineRematch = onCall(
 	async (request) => {
 		try {
 			const uid = authenticatedUid(request.auth)
-			const data = request.data as { tableId?: unknown } | null
-			if (!data || typeof data.tableId !== 'string' || !data.tableId || data.tableId.length > 128) {
-				throw new OnlineAuthorityError('INVALID_ARGUMENT', 'A valid Table ID is required.')
-			}
-			return await requestRematchForTable(database, data.tableId, uid)
+			return await requestRematchForTable(database, tableIdFrom(request.data), uid)
+		} catch (error) {
+			callableError(error)
+		}
+	},
+)
+
+export const leaveOnlineTable = onCall(
+	{ invoker: 'public' },
+	async (request) => {
+		try {
+			return await leaveTableForParticipant(
+				database,
+				tableIdFrom(request.data),
+				authenticatedUid(request.auth),
+			)
 		} catch (error) {
 			callableError(error)
 		}

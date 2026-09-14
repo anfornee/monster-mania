@@ -2,7 +2,7 @@
 
 ## Scope and status
 
-Monster Mania now has an emulator-verified and partially production-verified authoritative Online Table path. Two anonymous Firebase users can create and join a Table, Cloud Functions initializes one match, and authenticated commands run through the existing deterministic engine inside Firestore transactions. The browser receives shared public state plus only its own private hand.
+Monster Mania now has an emulator-verified and partially production-verified authoritative Online Table path. Two anonymous Firebase users can create and join a private or public Table, Cloud Functions initializes one match, and authenticated commands run through the existing deterministic engine inside Firestore transactions. The browser receives shared public state plus only its own private hand.
 
 Production Hosting create/join and match initialization have been exercised, but a full live two-browser match has not been completed. Do not describe Online gameplay as production-ready until the live checklist in `deployment.md` succeeds.
 
@@ -36,11 +36,13 @@ interface OnlineGameCommand {
 
 The function validates exact keys and action variants, requires Firebase Auth, resolves the UID against the Table seats, restores `playerId` server-side, checks match state, turn ownership, and revision, then invokes the normal engine. A legal command increments `revision` once; a rejection changes nothing. `commandId` is a UUID generated with `crypto.randomUUID()`. The most recent 64 accepted IDs remain in authoritative state, so an exact retry returns the committed revision without applying the action twice. Firestore transaction retries serialize concurrent commands; a different command based on the losing revision is stale.
 
-`requestOnlineRematch` is a separate authenticated callable. It is valid only after the match reaches `finished`; the first request records one public request flag, while the second request atomically creates a fresh seeded match in the same Table. The new match keeps a monotonically increasing Table revision, clears both request flags, replaces both private hands, and resets processed command IDs. Either player can leave immediately; a rematch starts only when both seats consent.
+`requestOnlineRematch` is a separate authenticated callable. It is valid only after the match reaches `finished`; the first request records one public request flag, causing the other player's result UI to offer **Accept rematch** or **Walk Away**. Acceptance atomically creates a fresh seeded match in the same Table. The new match keeps a monotonically increasing Table revision, clears both request flags, replaces both private hands, and resets processed command IDs. A rematch starts only when both seats consent.
+
+`leaveOnlineTable` is authenticated and participant-only. An explicit leave before or after a rematch request atomically deletes the Table code, shared Table, authoritative state, and both private views. The other player's listener treats the missing Table as a closed session, clears local restoration data, and returns to Online Play. Browser suspension or a lost network connection is not treated as a leave; presence and abandoned-session expiration remain separate hardening work.
 
 Functions use 2nd gen Callable/Firestore APIs, Node 22, Admin SDK default credentials, `256MiB`, zero minimum instances, and a maximum of five instances. Solo remains local and continues through the same `GameAction` and engine path.
 
-The two browser-facing callables explicitly use `invoker: 'public'` so cross-origin preflight and callable requests can reach Firebase's protocol handler. They still require `request.auth` before performing any operation. The Firestore initialization trigger is not public. When adding a function, preserve this distinction: browser-callable transport is public with authorization enforced inside the handler; background trigger transport remains restricted to its managed trigger identity. See `deployment.md` for the production IAM check and the characteristic preflight-403 failure mode.
+All browser-facing callables explicitly use `invoker: 'public'` so cross-origin preflight and callable requests can reach Firebase's protocol handler. They still require `request.auth` before performing any operation. The Firestore initialization trigger is not public. When adding a function, preserve this distinction: browser-callable transport is public with authorization enforced inside the handler; background trigger transport remains restricted to its managed trigger identity. See `deployment.md` for the production IAM check and the characteristic preflight-403 failure mode.
 
 ## Firestore schema
 
@@ -50,7 +52,7 @@ tableCodes/{joinCode}
   hostUid, guestUid, createdAt, updatedAt
 
 tables/{tableId}
-  lobby: schemaVersion, joinCode, status, host/guest UID and name, timestamps
+  lobby: schemaVersion, joinCode, visibility, status, host/guest UID and name, timestamps
   gameplay: revision, publicGameState, lastGameEvent, rematchRequests: { host, guest }
 
 tables/{tableId}/authority/state
@@ -73,7 +75,7 @@ The complete state is stored only under `authority/state`. Each client listens t
 
 ## Identity, lobby, and reconnect
 
-Firebase anonymous identity is created only during create, join, or restoration. Create atomically reserves a five-character code and Table. Join atomically claims the second seat and changes both records to `playing`; transaction retries guarantee only one simultaneous guest succeeds. Local storage holds only `{ tableId, joinCode }`, while Firebase Auth persists the browser-local UID.
+Firebase anonymous identity is created when Online Play loads, creates, joins, or restores a Table. Create atomically reserves a five-character code and a `private` or `public` Table. Authenticated clients may list only documents whose query proves `visibility == public`, `status == waiting`, and an empty guest seat. Selecting one uses the same transactional code-join path as a direct invitation, so only one simultaneous guest succeeds. Local storage holds only `{ tableId, joinCode }`, while Firebase Auth persists the browser-local UID.
 
 On refresh, the same anonymous UID restores its seat, reattaches the two permitted listeners, and calls the idempotent initializer. Existing authoritative state is reused and never redealt. Anonymous identity has no cross-device recovery.
 
@@ -83,9 +85,9 @@ Join, restore, initialization, command, and rematch waits use a bounded client t
 
 ## Security boundary
 
-Firestore Rules retain tightly scoped browser writes for Table creation and the one-time guest claim. They deny collection listing, arbitrary Table updates, deletion, all writes to private documents, and every read/write to `authority`. A participant can read only its own private document. Admin SDK writes from Functions bypass Rules and are the only authoritative gameplay writes.
+Firestore Rules retain tightly scoped browser writes for Table creation and the one-time guest claim. They permit only the constrained public-waiting Table query, and deny private/active Table listing, arbitrary Table updates, browser deletion, all writes to private documents, and every read/write to `authority`. A participant can read only its own private document. Admin SDK writes from Functions bypass Rules and are the only authoritative gameplay and cleanup writes.
 
-A five-character invitation has limited entropy. Rate limiting, App Check enforcement, structured abuse monitoring, presence, expiration/cleanup, and cross-device accounts remain deferred hardening. These do not change the rule that the browser never submits replacement state or receives an opponent hand.
+A five-character invitation has limited entropy. Rate limiting, App Check enforcement, structured abuse monitoring, disconnect presence, abandoned-Table expiration, and cross-device accounts remain deferred hardening. These do not change the rule that the browser never submits replacement state or receives an opponent hand.
 
 ## Local verification
 

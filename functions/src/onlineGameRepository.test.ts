@@ -17,6 +17,7 @@ import type {
 } from '../../src/game/network/onlineGame'
 import {
 	initializeMatchForTable,
+	leaveTableForParticipant,
 	requestRematchForTable,
 	submitCommandForTable,
 } from './onlineGameRepository'
@@ -154,6 +155,25 @@ describeWithEmulator('Firestore authoritative online game repository', () => {
 			rematchRequests: { host: false, guest: false },
 			revision: 1,
 		})
+	})
+
+	it('removes the Table and every known gameplay document when either player leaves', async () => {
+		const hostClient = client('host-a', 'GH6RT')
+		const created = await hostClient.createTable('host-a', 'Host A', 'public')
+		await client('guest-b').joinTable('guest-b', 'Guest B', created.table.joinCode)
+		await initializeMatchForTable(database, created.table.id, () => 12345)
+
+		await expect(leaveTableForParticipant(database, created.table.id, 'guest-b'))
+			.resolves.toEqual({ removed: true })
+		for (const path of [
+			`tables/${created.table.id}`,
+			`tableCodes/${created.table.joinCode}`,
+			`tables/${created.table.id}/authority/state`,
+			`tables/${created.table.id}/private/host-a`,
+			`tables/${created.table.id}/private/guest-b`,
+		]) {
+			expect((await database.doc(path).get()).exists).toBe(false)
+		}
 	})
 
 	it('synchronizes alternating actions to both player-filtered browser views', async () => {

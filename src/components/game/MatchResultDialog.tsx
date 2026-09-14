@@ -70,11 +70,19 @@ export function MatchResultDialog({
 								disabled={rematchRequested || rematchPending}
 								autoFocus
 							>
-								{rematchPending ? 'Requesting rematch…' : rematchRequested ? 'Rematch requested' : 'Request rematch'}
+								{rematchPending
+									? opponentRematchRequested ? 'Accepting rematch…' : 'Requesting rematch…'
+									: rematchRequested
+										? 'Rematch requested'
+										: opponentRematchRequested ? 'Accept rematch' : 'Request rematch'}
 							</button>
 						) : null}
 						{onPlayAgain ? <button type="button" className="primary-button" onClick={onPlayAgain} autoFocus>Play again</button> : null}
-						{onReturnToMenu ? <button type="button" className="secondary-button" onClick={onReturnToMenu}>Return to menu</button> : null}
+						{onReturnToMenu ? (
+							<button type="button" className="secondary-button" onClick={onReturnToMenu}>
+								{onRequestRematch ? 'Walk Away' : 'Return to menu'}
+							</button>
+						) : null}
 					</div>
 				</div>
 			) : null}

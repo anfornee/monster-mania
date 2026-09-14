@@ -9,7 +9,12 @@ import {
 	getOnlineTableClient,
 	type OnlineTableClient,
 } from '../../game/network/firebase/firestoreTableClient'
-import { OnlineTableError, type OnlineTableSession } from '../../game/network/firebase/onlineTable'
+import {
+	OnlineTableError,
+	type OnlineTableSession,
+	type OnlineTableVisibility,
+	type PublicOnlineTable,
+} from '../../game/network/firebase/onlineTable'
 import { withOnlineRequestTimeout } from '../../game/network/firebase/onlineRequestTimeout'
 import type { OnlineGameSnapshot } from '../../game/network/onlineGame'
 import { getGameAnnouncement } from '../../game/presentation/announcements'
@@ -68,19 +73,18 @@ function OnlineMatch({
 	uid,
 	client,
 	onBack,
-	onForget,
-	onReturnToMenu,
+	onLeave,
 }: {
 	session: OnlineTableSession
 	uid: string
 	client: OnlineTableClient
 	onBack: () => void
-	onForget: () => void
-	onReturnToMenu: () => void
+	onLeave: () => Promise<void>
 }) {
 	const [snapshot, setSnapshot] = useState<OnlineGameSnapshot | null>(null)
 	const [pending, setPending] = useState(false)
 	const [rematchPending, setRematchPending] = useState(false)
+	const [leavePending, setLeavePending] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 	const [presentation, setPresentation] = useState<GamePresentationStep[]>([])
 	const [listenerGeneration, setListenerGeneration] = useState(0)
@@ -151,6 +155,18 @@ function OnlineMatch({
 		}
 	}
 
+	const leaveTable = async () => {
+		if (leavePending) return
+		setLeavePending(true)
+		setError(null)
+		try {
+			await onLeave()
+		} catch (leaveError) {
+			setError(messageFor(leaveError))
+			setLeavePending(false)
+		}
+	}
+
 	if (!snapshot) {
 		return (
 			<main className="online-shell">
@@ -170,7 +186,9 @@ function OnlineMatch({
 			<nav className="game-topbar" aria-label="Match navigation">
 				<button type="button" className="back-button" onClick={onBack}>&larr; Tavern</button>
 				<strong>Online Table &middot; {session.table.joinCode}</strong>
-				<button type="button" onClick={onForget}>Forget Table</button>
+				<button type="button" onClick={() => void leaveTable()} disabled={leavePending}>
+					{leavePending ? 'Leaving…' : 'Leave Table'}
+				</button>
 			</nav>
 			{pending ? <div className="online-request-status" role="status">Waiting for the Table&hellip;</div> : null}
 			{error ? <div className="error-banner" role="alert">{error}</div> : null}
@@ -185,7 +203,7 @@ function OnlineMatch({
 				actionsResolving={pending || presentation.length > 0}
 				presentationStep={presentation[0] ?? null}
 				onPresentationComplete={() => setPresentation((current) => current.slice(1))}
-				onReturnToMenu={onReturnToMenu}
+				onReturnToMenu={() => void leaveTable()}
 			/>
 		</div>
 	)
@@ -202,9 +220,15 @@ export function OnlineLobby({
 	))
 	const [playerName, setPlayerName] = useState(initialPlayerName)
 	const [joinCode, setJoinCode] = useState('')
+	const [visibility, setVisibility] = useState<OnlineTableVisibility>('private')
 	const [session, setSession] = useState<OnlineTableSession | null>(null)
 	const [identity, setIdentity] = useState<MultiplayerIdentity | null>(null)
 	const [client, setClient] = useState<OnlineTableClient | null>(null)
+	const [publicTables, setPublicTables] = useState<PublicOnlineTable[]>([])
+	const [publicTablesLoading, setPublicTablesLoading] = useState(!storedSession)
+	const [publicTablesError, setPublicTablesError] = useState<string | null>(null)
+	const [notice, setNotice] = useState<string | null>(null)
+	const [restoringStoredSession, setRestoringStoredSession] = useState(Boolean(storedSession))
 	const [busyMessage, setBusyMessage] = useState<string | null>(
 		storedSession ? 'Restoring your Table…' : null,
 	)
@@ -240,12 +264,49 @@ export function OnlineLobby({
 				setError(messageFor(restoreError))
 			})
 			.finally(() => {
-				if (active) setBusyMessage(null)
+				if (active) {
+					setBusyMessage(null)
+					setRestoringStoredSession(false)
+				}
 			})
 		return () => {
 			active = false
 		}
 	}, [clientProvider, identityProvider, storedSession])
+
+	useEffect(() => {
+		if (session || restoringStoredSession || (identity && client)) return
+		let active = true
+		void Promise.all([identityProvider(), clientProvider()])
+			.then(([nextIdentity, nextClient]) => {
+				if (!active) return
+				setIdentity(nextIdentity)
+				setClient(nextClient)
+			})
+			.catch((listError) => {
+				if (!active) return
+				setPublicTablesLoading(false)
+				setPublicTablesError(messageFor(listError))
+			})
+		return () => {
+			active = false
+		}
+	}, [client, clientProvider, identity, identityProvider, restoringStoredSession, session])
+
+	useEffect(() => {
+		if (session || !identity || !client) return
+		return client.watchPublicTables(
+			(nextTables) => {
+				setPublicTables(nextTables)
+				setPublicTablesLoading(false)
+				setPublicTablesError(null)
+			},
+			(listError) => {
+				setPublicTablesLoading(false)
+				setPublicTablesError(listError.message)
+			},
+		)
+	}, [client, identity, listenerGeneration, session])
 
 	const watchedTableId = session?.table.id
 	useEffect(() => {
@@ -257,7 +318,17 @@ export function OnlineLobby({
 				setSession(nextSession)
 				setError(null)
 			},
-			(watchError) => setError(watchError.message),
+			(watchError) => {
+				if (watchError.code === 'TABLE_NOT_FOUND' || watchError.code === 'SESSION_NOT_FOUND') {
+					clearOnlineTableSession(window.localStorage)
+					setSession(null)
+					setPublicTablesLoading(true)
+					setNotice('The other hunter left, so the Table was closed.')
+					setError(null)
+					return
+				}
+				setError(watchError.message)
+			},
 		)
 	}, [client, identity, listenerGeneration, watchedTableId])
 
@@ -273,6 +344,7 @@ export function OnlineLobby({
 		}
 		setBusyMessage(busy)
 		setError(null)
+		setNotice(null)
 		try {
 			const sessionRequest = async () => {
 				const [nextIdentity, nextClient] = await Promise.all([identityProvider(), clientProvider()])
@@ -299,18 +371,25 @@ export function OnlineLobby({
 		}
 	}
 
+	const leaveCurrentTable = async () => {
+		if (!session || !client) return
+		try {
+			await withOnlineRequestTimeout(
+				client.leaveTable(session.table.id),
+				'Leaving the Table timed out. Check your connection and try again.',
+			)
+		} catch (leaveError) {
+			if (!(leaveError instanceof OnlineTableError) || leaveError.code !== 'TABLE_NOT_FOUND') throw leaveError
+		}
+	clearOnlineTableSession(window.localStorage)
+	setSession(null)
+	setPublicTablesLoading(true)
+		setNotice('You left the Table. It has been closed for both hunters.')
+		setError(null)
+	}
+
 	if (session) {
 		const table = session.table
-		const forgetTable = () => {
-			clearOnlineTableSession(window.localStorage)
-			setSession(null)
-			setIdentity(null)
-			setClient(null)
-		}
-		const returnToMenu = () => {
-			forgetTable()
-			onBack()
-		}
 		if (table.status !== 'waiting' && identity && client) {
 			return (
 				<OnlineMatch
@@ -318,8 +397,7 @@ export function OnlineLobby({
 					uid={identity.uid}
 					client={client}
 					onBack={onBack}
-					onForget={forgetTable}
-					onReturnToMenu={returnToMenu}
+					onLeave={leaveCurrentTable}
 				/>
 			)
 		}
@@ -342,14 +420,29 @@ export function OnlineLobby({
 					</div>
 					<p className="online-status-copy" role="status" aria-live="polite">
 						{table.status === 'waiting'
-							? 'Share this code with Player 2. This page updates as soon as the seat is claimed.'
+							? table.visibility === 'public'
+								? 'This public Table is listed for other hunters. You can also share its code directly.'
+								: 'Share this code with Player 2. This private Table updates as soon as the seat is claimed.'
 							: 'Both hunters are seated. The server is preparing the match.'}
 					</p>
 					{error ? <p className="field-error" role="alert">{error}</p> : null}
 					<div className="setup-actions">
 						<button type="button" className="secondary-button" onClick={onBack}>Return to tavern</button>
-						<button type="button" className="forget-table-button" onClick={forgetTable}>Forget this Table</button>
+						<button
+							type="button"
+							className="forget-table-button"
+							disabled={Boolean(busyMessage)}
+							onClick={() => {
+								setBusyMessage('Leaving the Table…')
+								void leaveCurrentTable()
+									.catch((leaveError) => setError(messageFor(leaveError)))
+									.finally(() => setBusyMessage(null))
+							}}
+						>
+							Leave this Table
+						</button>
 					</div>
+					{busyMessage ? <p className="online-request-status" role="status">{busyMessage}</p> : null}
 				</section>
 			</main>
 		)
@@ -361,7 +454,7 @@ export function OnlineLobby({
 			<section className="online-panel" aria-labelledby="online-title">
 				<span className="eyebrow">Online Table</span>
 				<h1 id="online-title">A seat is waiting across the table.</h1>
-				<p>Create a private Table or join one with a five-character code. Once both hunters are seated, the server deals the match.</p>
+				<p>Create a private or public Table, join an invitation with its five-character code, or take a seat at an open Table below.</p>
 				<label htmlFor="online-player-name">Hunter name</label>
 				<input
 					id="online-player-name"
@@ -374,13 +467,38 @@ export function OnlineLobby({
 				<div className="table-options">
 					<div>
 						<h2>Create Table</h2>
-						<p>Take Player 1's seat and receive a private invitation code.</p>
+						<p>Take Player 1's seat. Every Table gets a code; public Tables also appear in the open list.</p>
+						<fieldset className="table-visibility">
+							<legend>Who can join?</legend>
+							<label>
+								<input
+									type="radio"
+									name="table-visibility"
+									value="private"
+									checked={visibility === 'private'}
+									disabled={Boolean(busyMessage)}
+									onChange={() => setVisibility('private')}
+								/>
+								Private · code required
+							</label>
+							<label>
+								<input
+									type="radio"
+									name="table-visibility"
+									value="public"
+									checked={visibility === 'public'}
+									disabled={Boolean(busyMessage)}
+									onChange={() => setVisibility('public')}
+								/>
+								Public · listed below
+							</label>
+						</fieldset>
 						<button
 							type="button"
 							disabled={Boolean(busyMessage)}
 							onClick={() => void establishSession(
 								'Creating your Table…',
-								(tableClient, uid, name) => tableClient.createTable(uid, name),
+								(tableClient, uid, name) => tableClient.createTable(uid, name, visibility),
 							)}
 						>
 							Create Table
@@ -409,6 +527,41 @@ export function OnlineLobby({
 				</div>
 				{busyMessage ? <p className="online-request-status" role="status">{busyMessage}</p> : null}
 				{error ? <p className="field-error" role="alert">{error}</p> : null}
+				{notice ? <p className="online-notice" role="status">{notice}</p> : null}
+				<section className="open-tables" aria-labelledby="open-tables-title">
+					<div className="open-tables-heading">
+						<div>
+							<span className="eyebrow">Public matchmaking</span>
+							<h2 id="open-tables-title">Open Tables</h2>
+						</div>
+						<span aria-live="polite">{publicTables.length} available</span>
+					</div>
+					{publicTablesLoading ? <p role="status">Looking for open Tables…</p> : null}
+					{publicTablesError ? <p className="field-error" role="alert">{publicTablesError}</p> : null}
+					{!publicTablesLoading && !publicTablesError && publicTables.length === 0 ? (
+						<p>No public Tables are open right now. You can create the first one.</p>
+					) : null}
+					{publicTables.length > 0 ? (
+						<ul>
+							{publicTables.map((table) => (
+								<li key={table.id}>
+									<span><strong>{table.hostName}</strong><small>Waiting for an opponent</small></span>
+									<button
+										type="button"
+										disabled={Boolean(busyMessage)}
+										onClick={() => void establishSession(
+											'Joining the open Table…',
+											(tableClient, uid, name) => tableClient.joinTable(uid, name, table.joinCode),
+											'Joining the Table timed out. Check your connection and try again.',
+										)}
+									>
+										Join Table
+									</button>
+								</li>
+							))}
+						</ul>
+					) : null}
+				</section>
 			</section>
 		</main>
 	)

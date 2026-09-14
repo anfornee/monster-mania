@@ -46,8 +46,9 @@ Establish the product and integration seam without pretending that live multipla
 - server-side membership, turn, action, result-state, and privacy checks
 - replaceable Table client interface
 - documentation for backend implementation
-- Firebase Anonymous Auth identity created only on create/join/restore
+- Firebase Anonymous Auth identity created on Online Play discovery/create/join/restore
 - Firestore-backed two-seat membership with atomic guest claiming
+- private invitations plus constrained public waiting-Table discovery
 - realtime lobby updates and browser-local refresh restoration
 - deny-by-default Firestore rules and emulator coverage
 
@@ -55,7 +56,7 @@ This phase provides the cross-browser membership lobby. Firestore clients cannot
 
 ## Phase 4 — Functional Online Tables
 
-Goal: two people play from separate browsers/devices in a private Table using the same game engine as Solo.
+Goal: two people play from separate browsers/devices in a private or publicly discoverable Table using the same game engine as Solo.
 
 ### Transport adapter around the authoritative service
 
@@ -74,11 +75,13 @@ For each request, the service:
 
 ### Table lifecycle
 
-- build gameplay sessions on the existing private two-seat Firestore Table
+- build gameplay sessions on the existing two-seat Firestore Table
 - retain the collision-checked code and atomic second-seat claim
+- allow public waiting Tables to be discovered without weakening private Table listing rules
 - preserve third-participant rejection
 - start authoritative game state only when both seats are present
-- define expiration and cleanup behavior
+- clean up all Table documents when either participant explicitly leaves
+- define disconnect presence and abandoned-Table expiration behavior
 - maintain an opaque seat/session token separate from the public Table code
 
 ### Privacy boundary
@@ -170,7 +173,6 @@ Avoid a collectible deck-builder until the product actually needs one.
 
 - improved AI strategies
 - spectator mode
-- public matchmaking
 - alternate rule variants
 - match history and player profiles
 - achievements/statistics

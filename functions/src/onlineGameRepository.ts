@@ -167,3 +167,28 @@ export async function requestRematchForTable(
 		return { rematchStarted: true, revision }
 	})
 }
+
+export async function leaveTableForParticipant(
+	database: Firestore,
+	tableId: string,
+	uid: string,
+): Promise<{ removed: true }> {
+	return database.runTransaction(async (transaction) => {
+		const tableRef = database.doc(`tables/${tableId}`)
+		const tableSnapshot = await transaction.get(tableRef)
+		const table = tableFromData(tableId, tableSnapshot.data())
+		if (uid !== table.hostUid && uid !== table.guestUid) {
+			throw new OnlineAuthorityError('NOT_A_PARTICIPANT', 'This identity does not hold a seat at the Table.')
+		}
+		const joinCode = tableSnapshot.data()?.joinCode
+		if (typeof joinCode !== 'string') {
+			throw new OnlineAuthorityError('TABLE_NOT_FOUND', 'The Table does not exist or is invalid.')
+		}
+		transaction.delete(database.doc(`tableCodes/${joinCode}`))
+		transaction.delete(database.doc(`tables/${tableId}/authority/state`))
+		transaction.delete(database.doc(`tables/${tableId}/private/${table.hostUid}`))
+		if (table.guestUid) transaction.delete(database.doc(`tables/${tableId}/private/${table.guestUid}`))
+		transaction.delete(tableRef)
+		return { removed: true }
+	})
+}

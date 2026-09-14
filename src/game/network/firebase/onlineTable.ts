@@ -4,10 +4,19 @@ import type { OnlineGameEvent, OnlineRematchRequests } from '../onlineGame'
 
 export type OnlineTableStatus = TableStatus
 export type OnlineTableRole = 'host' | 'guest'
+export type OnlineTableVisibility = 'private' | 'public'
+
+export interface PublicOnlineTable {
+	id: string
+	joinCode: string
+	hostName: string
+	createdAtMs: number | null
+}
 
 export interface OnlineTable {
 	id: string
 	joinCode: string
+	visibility: OnlineTableVisibility
 	status: OnlineTableStatus
 	hostUid: string
 	hostName: string
