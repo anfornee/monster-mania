@@ -10,6 +10,10 @@ interface MatchResultDialogProps {
 	catalog: GameCatalog
 	onPlayAgain?: () => void
 	onReturnToMenu?: () => void
+	onRequestRematch?: () => void
+	rematchRequested?: boolean
+	opponentRematchRequested?: boolean
+	rematchPending?: boolean
 }
 
 export function MatchResultDialog({
@@ -18,6 +22,10 @@ export function MatchResultDialog({
 	catalog,
 	onPlayAgain,
 	onReturnToMenu,
+	onRequestRematch,
+	rematchRequested = false,
+	opponentRematchRequested = false,
+	rematchPending = false,
 }: MatchResultDialogProps) {
 	const dialogRef = useRef<HTMLDialogElement>(null)
 	const winner = getPlayer(state, state.winnerId ?? '')
@@ -42,10 +50,30 @@ export function MatchResultDialog({
 					</div>
 				))}
 			</div>
-			{onPlayAgain && onReturnToMenu ? (
+			{onRequestRematch || onPlayAgain || onReturnToMenu ? (
 				<div className="result-actions">
-					<button type="button" className="primary-button" onClick={onPlayAgain} autoFocus>Play again</button>
-					<button type="button" className="secondary-button" onClick={onReturnToMenu}>Return to menu</button>
+					{onRequestRematch ? (
+						<>
+							<button
+								type="button"
+								className="primary-button"
+								onClick={onRequestRematch}
+								disabled={rematchRequested || rematchPending}
+								autoFocus
+							>
+								{rematchPending ? 'Requesting rematch…' : rematchRequested ? 'Rematch requested' : 'Request rematch'}
+							</button>
+							<p className="rematch-status" role="status" aria-live="polite">
+								{rematchRequested
+									? 'Waiting for your opponent to accept a rematch.'
+									: opponentRematchRequested
+										? 'Your opponent has requested a rematch.'
+										: 'Both players must request a rematch before a new match begins.'}
+							</p>
+						</>
+					) : null}
+					{onPlayAgain ? <button type="button" className="primary-button" onClick={onPlayAgain} autoFocus>Play again</button> : null}
+					{onReturnToMenu ? <button type="button" className="secondary-button" onClick={onReturnToMenu}>Return to menu</button> : null}
 				</div>
 			) : null}
 		</dialog>

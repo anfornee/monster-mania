@@ -22,6 +22,7 @@ import type {
 	OnlineGameEvent,
 	OnlineGameSnapshot,
 	OnlinePrivateGameState,
+	OnlineRematchRequests,
 } from '../onlineGame'
 import { combineOnlineGameView, materializeClientGameState } from '../onlineGameView'
 import { createTableCode, isValidTableCode, normalizeTableCode } from '../tableCode'
@@ -62,6 +63,16 @@ function timestampMillis(value: unknown): number | null {
 	return value instanceof Timestamp ? value.toMillis() : null
 }
 
+function readRematchRequests(value: unknown): OnlineRematchRequests {
+	if (
+		!value
+		|| typeof value !== 'object'
+		|| typeof (value as { host?: unknown }).host !== 'boolean'
+		|| typeof (value as { guest?: unknown }).guest !== 'boolean'
+	) return { host: false, guest: false }
+	return value as OnlineRematchRequests
+}
+
 function tableFromSnapshot(snapshot: DocumentSnapshot<DocumentData>): OnlineTable {
 	if (!snapshot.exists()) throw new OnlineTableError('TABLE_NOT_FOUND', 'This Table no longer exists.')
 	const data = snapshot.data()
@@ -90,6 +101,7 @@ function tableFromSnapshot(snapshot: DocumentSnapshot<DocumentData>): OnlineTabl
 		revision: Number.isSafeInteger(data.revision) ? data.revision : null,
 		publicGameState: readPublicGameState(data.publicGameState),
 		lastGameEvent: readOnlineGameEvent(data.lastGameEvent),
+		rematchRequests: readRematchRequests(data.rematchRequests),
 	}
 }
 
@@ -169,6 +181,7 @@ export interface OnlineTableClient {
 		onError: (error: OnlineTableError) => void,
 	) => Unsubscribe
 	initializeGame: (tableId: string) => Promise<number>
+	requestRematch: (tableId: string) => Promise<number>
 	submitAction: (tableId: string, expectedRevision: number, action: GameAction) => Promise<number>
 	watchGame: (
 		tableId: string,
@@ -328,6 +341,19 @@ export class FirestoreTableClient implements OnlineTableClient {
 		}
 	}
 
+	async requestRematch(tableId: string): Promise<number> {
+		if (!this.functions) throw new OnlineTableError('FIREBASE_UNAVAILABLE', 'Firebase Functions are unavailable.')
+		try {
+			const callable = httpsCallable<{ tableId: string }, { revision: number }>(
+				this.functions,
+				'requestOnlineRematch',
+			)
+			return (await callable({ tableId })).data.revision
+		} catch (error) {
+			this.normalizeGameError(error)
+		}
+	}
+
 	async submitAction(tableId: string, expectedRevision: number, action: GameAction): Promise<number> {
 		if (!this.functions) throw new OnlineTableError('FIREBASE_UNAVAILABLE', 'Firebase Functions are unavailable.')
 		const wireAction = Object.fromEntries(
@@ -410,6 +436,7 @@ export class FirestoreTableClient implements OnlineTableClient {
 		if (reason === 'ILLEGAL_ACTION') throw new OnlineTableError('ILLEGAL_ACTION', 'That move is not legal.')
 		if (reason === 'GAME_NOT_STARTED') throw new OnlineTableError('GAME_NOT_READY', 'The match is still initializing.')
 		if (reason === 'GAME_FINISHED') throw new OnlineTableError('TABLE_FINISHED', 'This match has finished.')
+		if (reason === 'REMATCH_NOT_AVAILABLE') throw new OnlineTableError('REMATCH_NOT_AVAILABLE', 'A rematch is only available after the match finishes.')
 		normalizeFirebaseError(error)
 	}
 }

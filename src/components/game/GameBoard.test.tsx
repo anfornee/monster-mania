@@ -50,6 +50,28 @@ describe('table presentation privacy and actions', () => {
 		expect(markup).toContain('Final score')
 	})
 
+	it('offers a coordinated rematch request for an online finished match', () => {
+		const ready = createSandboxScenario('infinity-beast-beatable').state
+		const finished = applyGameAction(ready, {
+			type: 'DEFEAT_MONSTER',
+			playerId: 'player-1',
+			monsterId: CORE_CATALOG.suddenDeathMonster.id,
+		}).state
+		const markup = renderToStaticMarkup(
+			<GameBoard
+				state={finished}
+				localPlayerId="player-1"
+				onAction={() => undefined}
+				onRequestRematch={() => undefined}
+				onReturnToMenu={() => undefined}
+				opponentRematchRequested
+			/>,
+		)
+		expect(markup).toContain('Request rematch')
+		expect(markup).toContain('Your opponent has requested a rematch.')
+		expect(markup).toContain('Return to menu')
+	})
+
 	it('places the Draw deck before the arena cards and the Monster deck after them', () => {
 		const state = createSandboxScenario('fresh-game').state
 		const markup = renderToStaticMarkup(

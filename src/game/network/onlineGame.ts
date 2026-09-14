@@ -55,6 +55,11 @@ export interface OnlineGameSnapshot {
 	event: OnlineGameEvent | null
 }
 
+export interface OnlineRematchRequests {
+	host: boolean
+	guest: boolean
+}
+
 export interface OnlinePublicGameFields {
 	revision: number
 	publicGameState: PublicGameState
@@ -62,4 +67,3 @@ export interface OnlinePublicGameFields {
 }
 
 export const MAX_PROCESSED_ONLINE_COMMANDS = 64
-

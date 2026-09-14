@@ -139,7 +139,7 @@ Online play is complete only after a full two-browser match, forced discard, Act
 
 - durable Table persistence where needed
 - clearer reconnect and abandonment handling
-- host controls and rematch
+- host controls and abandonment handling
 - rate limiting and basic abuse protection
 - structured operational logging
 - protocol and state migrations

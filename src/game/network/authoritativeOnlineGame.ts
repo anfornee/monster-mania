@@ -23,6 +23,7 @@ export type OnlineAuthorityErrorCode =
 	| 'NOT_A_PARTICIPANT'
 	| 'GAME_NOT_STARTED'
 	| 'GAME_FINISHED'
+	| 'REMATCH_NOT_AVAILABLE'
 	| 'NOT_YOUR_TURN'
 	| 'STALE_REVISION'
 	| 'ILLEGAL_ACTION'

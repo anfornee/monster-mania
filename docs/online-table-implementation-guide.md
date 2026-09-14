@@ -6,7 +6,7 @@ The Online Table architecture now has three complementary layers:
 - `src/game/network/firebase/` plus `OnlineLobby.tsx` provide Firebase anonymous identity, atomic membership, Callable Function commands, revision-matched public/private listeners, refresh restoration, and the existing board presentation.
 - `functions/` provides the trusted Node 22 runtime: idempotent initialization, authenticated commands, shared-engine validation, transactional revisions, and separate public/private writes.
 
-The authoritative path is implemented and verified locally with unit and Firestore emulator tests, including a complete deterministic match. It has not yet passed production deployment or a full live two-browser match. Firestore clients cannot write `GameState`; private subdocuments are read-own/write-none.
+The authoritative path is implemented and verified locally with unit and Firestore emulator tests, including a complete deterministic match and coordinated rematch requests. It has not yet passed production deployment or a full live two-browser rematch flow. Firestore clients cannot write `GameState`; private subdocuments are read-own/write-none.
 
 See [Firebase Online Table](08-firebase-online-lobby.md) for the schema, identity lifecycle, authority, privacy, revisions, presentation events, deployment, and testing.
 
@@ -27,6 +27,7 @@ Before claiming online gameplay is production-ready, verify in two live browsers
 - disconnect/reconnect resends the latest player-specific view;
 - forced discard, Action chains, Black Hole, final three, scoring, and Sudden Death complete through the online authority;
 - refresh recovery retains the same authoritative match;
-- both clients reach and agree on one valid final winner.
+- both clients reach and agree on one valid final winner;
+- both clients can request a rematch and observe one fresh authoritative match only after both consent.
 
-Presence, expiration/cleanup, rate limiting, App Check enforcement, cross-device account recovery, and rematches remain later hardening work.
+Presence, expiration/cleanup, rate limiting, App Check enforcement, and cross-device account recovery remain later hardening work.

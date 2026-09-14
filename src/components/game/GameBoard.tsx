@@ -27,6 +27,10 @@ interface GameBoardProps {
 	onAction: (action: GameAction) => void
 	onPlayAgain?: () => void
 	onReturnToMenu?: () => void
+	onRequestRematch?: () => void
+	rematchRequested?: boolean
+	opponentRematchRequested?: boolean
+	rematchPending?: boolean
 	catalog?: GameCatalog
 	compact?: boolean
 	actionsResolving?: boolean
@@ -58,6 +62,10 @@ export function GameBoard({
 	onAction,
 	onPlayAgain,
 	onReturnToMenu,
+	onRequestRematch,
+	rematchRequested,
+	opponentRematchRequested,
+	rematchPending,
 	catalog = CORE_CATALOG,
 	compact = false,
 	actionsResolving = false,
@@ -256,6 +264,10 @@ export function GameBoard({
 					catalog={catalog}
 					onPlayAgain={onPlayAgain}
 					onReturnToMenu={onReturnToMenu}
+					onRequestRematch={onRequestRematch}
+					rematchRequested={rematchRequested}
+					opponentRematchRequested={opponentRematchRequested}
+					rematchPending={rematchPending}
 				/>
 			) : null}
 		</main>

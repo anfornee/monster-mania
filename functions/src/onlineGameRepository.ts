@@ -8,7 +8,11 @@ import {
 	type OnlineMatchWriteModel,
 	type SeatedOnlineTable,
 } from '../../src/game/network/authoritativeOnlineGame'
-import type { AuthoritativeOnlineMatch, OnlineGameCommand } from '../../src/game/network/onlineGame'
+import type {
+	AuthoritativeOnlineMatch,
+	OnlineGameCommand,
+	OnlineRematchRequests,
+} from '../../src/game/network/onlineGame'
 
 function seed(): number {
 	return randomBytes(4).readUInt32BE(0)
@@ -49,6 +53,7 @@ function writeMatch(
 	database: Firestore,
 	tableId: string,
 	model: OnlineMatchWriteModel,
+	extraTableFields: Record<string, unknown> = {},
 ): void {
 	const tableRef = database.doc(`tables/${tableId}`)
 	transaction.set(database.doc(`tables/${tableId}/authority/state`), model.authority)
@@ -56,10 +61,22 @@ function writeMatch(
 		...model.public,
 		status: model.authority.gameState.phase === 'game-over' ? 'finished' : 'playing',
 		updatedAt: FieldValue.serverTimestamp(),
+		...extraTableFields,
 	})
 	for (const [uid, privateState] of Object.entries(model.privateByUid)) {
 		transaction.set(database.doc(`tables/${tableId}/private/${uid}`), privateState)
 	}
+}
+
+function readRematchRequests(data: FirebaseFirestore.DocumentData | undefined): OnlineRematchRequests {
+	const value = data?.rematchRequests
+	if (
+		!value
+		|| typeof value !== 'object'
+		|| typeof value.host !== 'boolean'
+		|| typeof value.guest !== 'boolean'
+	) return { host: false, guest: false }
+	return { host: value.host, guest: value.guest }
 }
 
 export async function initializeMatchForTable(
@@ -97,3 +114,56 @@ export async function submitCommandForTable(
 	})
 }
 
+export async function requestRematchForTable(
+	database: Firestore,
+	tableId: string,
+	uid: string,
+	createSeed: () => number = seed,
+): Promise<{ rematchStarted: boolean; revision: number }> {
+	return database.runTransaction(async (transaction) => {
+		const tableRef = database.doc(`tables/${tableId}`)
+		const authorityRef = database.doc(`tables/${tableId}/authority/state`)
+		const [tableSnapshot, authoritySnapshot] = await transaction.getAll(tableRef, authorityRef)
+		const table = tableFromData(tableId, tableSnapshot.data())
+		const authority = authorityFromData(authoritySnapshot.data())
+		if (
+			table.status !== 'finished'
+			|| !table.guestUid
+			|| !table.guestName
+			|| !authority
+			|| authority.gameState.phase !== 'game-over'
+		) {
+			throw new OnlineAuthorityError('REMATCH_NOT_AVAILABLE', 'A rematch is only available after the match finishes.')
+		}
+		const role = uid === table.hostUid ? 'host' : uid === table.guestUid ? 'guest' : null
+		if (!role) throw new OnlineAuthorityError('NOT_A_PARTICIPANT', 'This identity does not hold a seat at the Table.')
+		const requests = readRematchRequests(tableSnapshot.data())
+		if (requests[role]) return { rematchStarted: false, revision: authority.revision }
+		const nextRequests = { ...requests, [role]: true }
+		if (!nextRequests.host || !nextRequests.guest) {
+			transaction.update(tableRef, {
+				rematchRequests: nextRequests,
+				updatedAt: FieldValue.serverTimestamp(),
+			})
+			return { rematchStarted: false, revision: authority.revision }
+		}
+
+		const initialized = initializeOnlineMatch({ ...table, status: 'playing' }, createSeed())
+		const revision = authority.revision + 1
+		const rematchModel: OnlineMatchWriteModel = {
+			...initialized,
+			authority: { ...initialized.authority, revision },
+			public: { ...initialized.public, revision },
+			privateByUid: Object.fromEntries(
+				Object.entries(initialized.privateByUid).map(([playerUid, privateState]) => [
+					playerUid,
+					{ ...privateState, revision },
+				]),
+			),
+		}
+		writeMatch(transaction, database, tableId, rematchModel, {
+			rematchRequests: { host: false, guest: false },
+		})
+		return { rematchStarted: true, revision }
+	})
+}

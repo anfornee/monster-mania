@@ -1,6 +1,6 @@
 import type { TableStatus } from '../protocol'
 import type { PublicGameState } from '../clientState'
-import type { OnlineGameEvent } from '../onlineGame'
+import type { OnlineGameEvent, OnlineRematchRequests } from '../onlineGame'
 
 export type OnlineTableStatus = TableStatus
 export type OnlineTableRole = 'host' | 'guest'
@@ -18,6 +18,7 @@ export interface OnlineTable {
 	revision: number | null
 	publicGameState: PublicGameState | null
 	lastGameEvent: OnlineGameEvent | null
+	rematchRequests: OnlineRematchRequests
 }
 
 export interface OnlineTableSession {
@@ -30,6 +31,7 @@ export type OnlineTableErrorCode =
 	| 'TABLE_NOT_FOUND'
 	| 'TABLE_FULL'
 	| 'TABLE_FINISHED'
+	| 'REMATCH_NOT_AVAILABLE'
 	| 'INVALID_PLAYER_NAME'
 	| 'INVALID_TABLE_DATA'
 	| 'SESSION_NOT_FOUND'

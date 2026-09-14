@@ -36,6 +36,8 @@ interface OnlineGameCommand {
 
 The function validates exact keys and action variants, requires Firebase Auth, resolves the UID against the Table seats, restores `playerId` server-side, checks match state, turn ownership, and revision, then invokes the normal engine. A legal command increments `revision` once; a rejection changes nothing. `commandId` is a UUID generated with `crypto.randomUUID()`. The most recent 64 accepted IDs remain in authoritative state, so an exact retry returns the committed revision without applying the action twice. Firestore transaction retries serialize concurrent commands; a different command based on the losing revision is stale.
 
+`requestOnlineRematch` is a separate authenticated callable. It is valid only after the match reaches `finished`; the first request records one public request flag, while the second request atomically creates a fresh seeded match in the same Table. The new match keeps a monotonically increasing Table revision, clears both request flags, replaces both private hands, and resets processed command IDs. Either player can leave immediately; a rematch starts only when both seats consent.
+
 Functions use 2nd gen Callable/Firestore APIs, Node 22, Admin SDK default credentials, `256MiB`, zero minimum instances, and a maximum of five instances. Solo remains local and continues through the same `GameAction` and engine path.
 
 The two browser-facing callables explicitly use `invoker: 'public'` so cross-origin preflight and callable requests can reach Firebase's protocol handler. They still require `request.auth` before performing any operation. The Firestore initialization trigger is not public. When adding a function, preserve this distinction: browser-callable transport is public with authorization enforced inside the handler; background trigger transport remains restricted to its managed trigger identity. See `deployment.md` for the production IAM check and the characteristic preflight-403 failure mode.
@@ -49,7 +51,7 @@ tableCodes/{joinCode}
 
 tables/{tableId}
   lobby: schemaVersion, joinCode, status, host/guest UID and name, timestamps
-  gameplay: revision, publicGameState, lastGameEvent
+  gameplay: revision, publicGameState, lastGameEvent, rematchRequests: { host, guest }
 
 tables/{tableId}/authority/state
   schemaVersion: 1

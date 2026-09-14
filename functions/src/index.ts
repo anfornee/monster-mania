@@ -7,7 +7,11 @@ import {
 	OnlineAuthorityError,
 	parseOnlineGameCommand,
 } from '../../src/game/network/authoritativeOnlineGame'
-import { initializeMatchForTable, submitCommandForTable } from './onlineGameRepository'
+import {
+	initializeMatchForTable,
+	requestRematchForTable,
+	submitCommandForTable,
+} from './onlineGameRepository'
 
 if (getApps().length === 0) initializeApp()
 const database = getFirestore()
@@ -31,6 +35,7 @@ function callableError(error: unknown): never {
 		NOT_A_PARTICIPANT: 'permission-denied',
 		GAME_NOT_STARTED: 'failed-precondition',
 		GAME_FINISHED: 'failed-precondition',
+		REMATCH_NOT_AVAILABLE: 'failed-precondition',
 		NOT_YOUR_TURN: 'failed-precondition',
 		STALE_REVISION: 'aborted',
 		ILLEGAL_ACTION: 'failed-precondition',
@@ -78,13 +83,35 @@ export const submitOnlineGameCommand = onCall(
 	},
 )
 
+export const requestOnlineRematch = onCall(
+	{ invoker: 'public' },
+	async (request) => {
+		try {
+			const uid = authenticatedUid(request.auth)
+			const data = request.data as { tableId?: unknown } | null
+			if (!data || typeof data.tableId !== 'string' || !data.tableId || data.tableId.length > 128) {
+				throw new OnlineAuthorityError('INVALID_ARGUMENT', 'A valid Table ID is required.')
+			}
+			return await requestRematchForTable(database, data.tableId, uid)
+		} catch (error) {
+			callableError(error)
+		}
+	},
+)
+
 export const initializeGameWhenTableIsSeated = onDocumentUpdated(
 	'tables/{tableId}',
 	async (event) => {
 		const before = event.data?.before.data()
 		const after = event.data?.after.data()
 		if (before?.status === 'waiting' && after?.status === 'playing') {
-			await initializeMatchForTable(database, event.params.tableId)
+			try {
+				await initializeMatchForTable(database, event.params.tableId)
+			} catch (error) {
+				// A queued event may outlive a Table removed by cleanup or emulator teardown.
+				if (error instanceof OnlineAuthorityError && error.code === 'TABLE_NOT_FOUND') return
+				throw error
+			}
 		}
 	},
 )

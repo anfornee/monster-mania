@@ -76,6 +76,7 @@ function OnlineMatch({
 }) {
 	const [snapshot, setSnapshot] = useState<OnlineGameSnapshot | null>(null)
 	const [pending, setPending] = useState(false)
+	const [rematchPending, setRematchPending] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 	const [presentation, setPresentation] = useState<GamePresentationStep[]>([])
 	const previousState = useRef<GameState | null>(null)
@@ -119,6 +120,19 @@ function OnlineMatch({
 		}
 	}
 
+	const requestRematch = async () => {
+		if (rematchPending || session.table.rematchRequests[session.role]) return
+		setRematchPending(true)
+		setError(null)
+		try {
+			await client.requestRematch(session.table.id)
+		} catch (requestError) {
+			setError(messageFor(requestError))
+		} finally {
+			setRematchPending(false)
+		}
+	}
+
 	if (!snapshot) {
 		return (
 			<main className="online-shell">
@@ -146,6 +160,10 @@ function OnlineMatch({
 				state={snapshot.state}
 				localPlayerId={uid}
 				onAction={(action) => void submit(action)}
+				onRequestRematch={() => void requestRematch()}
+				rematchRequested={session.table.rematchRequests[session.role]}
+				opponentRematchRequested={session.table.rematchRequests[session.role === 'host' ? 'guest' : 'host']}
+				rematchPending={rematchPending}
 				actionsResolving={pending || presentation.length > 0}
 				presentationStep={presentation[0] ?? null}
 				onPresentationComplete={() => setPresentation((current) => current.slice(1))}

@@ -15,7 +15,11 @@ import type {
 	OnlineGameCommand,
 	OnlineGameSnapshot,
 } from '../../src/game/network/onlineGame'
-import { initializeMatchForTable, submitCommandForTable } from './onlineGameRepository'
+import {
+	initializeMatchForTable,
+	requestRematchForTable,
+	submitCommandForTable,
+} from './onlineGameRepository'
 
 const describeWithEmulator = process.env.FIRESTORE_EMULATOR_HOST ? describe : describe.skip
 const PROJECT_ID = 'monster-mania-aea35'
@@ -124,6 +128,32 @@ describeWithEmulator('Firestore authoritative online game repository', () => {
 		expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
 		expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1)
 		expect((await authority()).revision).toBe(1)
+	})
+
+	it('starts a fresh match only after both players request a rematch', async () => {
+		await seatTable()
+		await initializeMatchForTable(database, 'table-1', () => 12345)
+		const finished = await authority()
+		finished.gameState.phase = 'game-over'
+		finished.gameState.winnerId = 'host-a'
+		await database.doc('tables/table-1/authority/state').set(finished)
+		await database.doc('tables/table-1').update({ status: 'finished' })
+
+		await expect(requestRematchForTable(database, 'table-1', 'host-a', () => 24680))
+			.resolves.toEqual({ rematchStarted: false, revision: 0 })
+		expect((await database.doc('tables/table-1').get()).data()?.rematchRequests)
+			.toEqual({ host: true, guest: false })
+
+		await expect(requestRematchForTable(database, 'table-1', 'guest-b', () => 24680))
+			.resolves.toEqual({ rematchStarted: true, revision: 1 })
+		const restarted = await authority()
+		expect(restarted.gameState.phase).not.toBe('game-over')
+		expect(restarted.gameState.winnerId).toBeNull()
+		expect((await database.doc('tables/table-1').get()).data()).toMatchObject({
+			status: 'playing',
+			rematchRequests: { host: false, guest: false },
+			revision: 1,
+		})
 	})
 
 	it('synchronizes alternating actions to both player-filtered browser views', async () => {
