@@ -84,7 +84,7 @@ For Console-only setup, open Google Cloud Console > IAM & Admin > IAM for `monst
 
 The project/API service agents may require their standard service-agent roles if those were manually removed; do not assign those roles to the GitHub deployer. The deployer may retain its existing Hosting role used by `action-hosting-deploy`.
 
-No IAM change is considered fixed until the merge deployment succeeds. The current local Google Cloud user needs an interactive `gcloud auth login` before it can inspect or change project policy, so this repository change does not claim IAM was performed.
+No IAM change is considered fixed until the merge deployment succeeds and the deployed resources pass the relevant policy and live checks. Do not infer the GitHub deployment principal or its permissions from whichever Google Cloud user is authenticated locally.
 
 ## Automated deployment
 
@@ -97,6 +97,29 @@ https://monster-mania-aea35.web.app
 ```
 
 Anonymous Authentication remains a one-time Firebase Console setting; Firebase CLI `15.30.0` has no supported `firebase.json` declaration for enabling that provider.
+
+## Browser-callable function invokers
+
+Every 2nd gen `onCall` or `onRequest` function invoked directly by the web app must explicitly declare `invoker: 'public'`. This permits the browser's unauthenticated CORS preflight and request envelope to reach the Firebase Functions callable middleware. It does not bypass application authentication: callable handlers that require a player identity must still reject requests without `request.auth`.
+
+Firestore, Eventarc, scheduled, Pub/Sub, and other background triggers must not be made public. Their Google-managed trigger identity invokes the backing service instead.
+
+Firebase callable functions provide their own CORS handling. If a browser reports an `OPTIONS` response with status `403` and no `Access-Control-Allow-Origin` header, inspect the backing Cloud Run service's invoker policy before adding custom CORS code. That response usually means Google infrastructure rejected the preflight before the function ran.
+
+After adding or redeploying a browser-facing callable, resolve its backing service and inspect its policy:
+
+```bash
+gcloud functions describe FUNCTION_NAME --gen2 \
+  --region=us-central1 \
+  --project=monster-mania-aea35 \
+  --format="value(serviceConfig.service)"
+
+gcloud run services get-iam-policy CLOUD_RUN_SERVICE_NAME \
+  --region=us-central1 \
+  --project=monster-mania-aea35
+```
+
+The policy must contain `allUsers` with `roles/run.invoker` for a browser-facing function. Keep `{ invoker: 'public' }` in the function declaration so a later deployment can reproduce the intended policy; do not rely on an undocumented manual binding. Verify one authenticated browser call after deployment, because emulator tests do not reproduce production Cloud Run IAM.
 
 ## Manual deployment
 
@@ -138,6 +161,7 @@ Vite fingerprints imported JS/CSS. Files copied from `public/` keep stable paths
 - Rules deployment 403: confirm the printed principal and `roles/firebaserules.admin` binding.
 - Index deployment denied: confirm `roles/datastore.indexAdmin`.
 - Functions deployment denied: confirm Cloud Functions Admin and resource-scoped Service Account User bindings, plus required APIs.
+- Callable request returns an `OPTIONS 403` without CORS headers: confirm that the function is declared with `invoker: 'public'` and that its backing Cloud Run service grants `roles/run.invoker` to `allUsers`.
 - Emulator startup fails: confirm JDK 21+ is active.
 - Authentication fails: confirm the repository secret exists, is valid JSON, and belongs to this project.
 - Artwork looks stale: review the asset-version bump and browser cache.

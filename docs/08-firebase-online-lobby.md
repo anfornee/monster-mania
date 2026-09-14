@@ -2,9 +2,9 @@
 
 ## Scope and status
 
-Monster Mania now has a locally implemented and emulator-verified authoritative Online Table path. Two anonymous Firebase users can create and join a Table, Cloud Functions initializes one match, and authenticated commands run through the existing deterministic engine inside Firestore transactions. The browser receives shared public state plus only its own private hand.
+Monster Mania now has an emulator-verified and partially production-verified authoritative Online Table path. Two anonymous Firebase users can create and join a Table, Cloud Functions initializes one match, and authenticated commands run through the existing deterministic engine inside Firestore transactions. The browser receives shared public state plus only its own private hand.
 
-This implementation has not yet been deployed or completed as a full live two-browser match. Do not describe Online gameplay as production-ready until the IAM change, deployment, and live checklist in `deployment.md` succeed.
+Production Hosting create/join and match initialization have been exercised, but a full live two-browser match has not been completed. Do not describe Online gameplay as production-ready until the live checklist in `deployment.md` succeeds.
 
 The Firebase project is `monster-mania-aea35`; its default Firestore database is Standard edition in `nam5`. Functions run in `us-central1`, an appropriate low-latency region for the multi-region database. Anonymous Authentication must remain enabled. Web SDK configuration is public client identification loaded from `VITE_FIREBASE_*` values or Firebase Hosting's `/__/firebase/init.json`; service-account credentials must never enter Vite variables or the repository.
 
@@ -37,6 +37,8 @@ interface OnlineGameCommand {
 The function validates exact keys and action variants, requires Firebase Auth, resolves the UID against the Table seats, restores `playerId` server-side, checks match state, turn ownership, and revision, then invokes the normal engine. A legal command increments `revision` once; a rejection changes nothing. `commandId` is a UUID generated with `crypto.randomUUID()`. The most recent 64 accepted IDs remain in authoritative state, so an exact retry returns the committed revision without applying the action twice. Firestore transaction retries serialize concurrent commands; a different command based on the losing revision is stale.
 
 Functions use 2nd gen Callable/Firestore APIs, Node 22, Admin SDK default credentials, `256MiB`, zero minimum instances, and a maximum of five instances. Solo remains local and continues through the same `GameAction` and engine path.
+
+The two browser-facing callables explicitly use `invoker: 'public'` so cross-origin preflight and callable requests can reach Firebase's protocol handler. They still require `request.auth` before performing any operation. The Firestore initialization trigger is not public. When adding a function, preserve this distinction: browser-callable transport is public with authorization enforced inside the handler; background trigger transport remains restricted to its managed trigger identity. See `deployment.md` for the production IAM check and the characteristic preflight-403 failure mode.
 
 ## Firestore schema
 

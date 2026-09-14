@@ -44,33 +44,39 @@ function authenticatedUid(auth: { uid: string } | undefined): string {
 	return auth.uid
 }
 
-export const initializeOnlineGame = onCall(async (request) => {
-	try {
-		const uid = authenticatedUid(request.auth)
-		const data = request.data as { tableId?: unknown } | null
-		if (!data || typeof data.tableId !== 'string' || !data.tableId || data.tableId.length > 128) {
-			throw new OnlineAuthorityError('INVALID_ARGUMENT', 'A valid Table ID is required.')
+export const initializeOnlineGame = onCall(
+	{ invoker: 'public' },
+	async (request) => {
+		try {
+			const uid = authenticatedUid(request.auth)
+			const data = request.data as { tableId?: unknown } | null
+			if (!data || typeof data.tableId !== 'string' || !data.tableId || data.tableId.length > 128) {
+				throw new OnlineAuthorityError('INVALID_ARGUMENT', 'A valid Table ID is required.')
+			}
+			const table = await database.doc(`tables/${data.tableId}`).get()
+			const tableData = table.data()
+			if (!tableData || (tableData.hostUid !== uid && tableData.guestUid !== uid)) {
+				throw new OnlineAuthorityError('NOT_A_PARTICIPANT', 'This identity does not hold a seat at the Table.')
+			}
+			return await initializeMatchForTable(database, data.tableId)
+		} catch (error) {
+			callableError(error)
 		}
-		const table = await database.doc(`tables/${data.tableId}`).get()
-		const tableData = table.data()
-		if (!tableData || (tableData.hostUid !== uid && tableData.guestUid !== uid)) {
-			throw new OnlineAuthorityError('NOT_A_PARTICIPANT', 'This identity does not hold a seat at the Table.')
-		}
-		return await initializeMatchForTable(database, data.tableId)
-	} catch (error) {
-		callableError(error)
-	}
-})
+	},
+)
 
-export const submitOnlineGameCommand = onCall(async (request) => {
-	try {
-		const uid = authenticatedUid(request.auth)
-		const command = parseOnlineGameCommand(request.data)
-		return await submitCommandForTable(database, uid, command)
-	} catch (error) {
-		callableError(error)
-	}
-})
+export const submitOnlineGameCommand = onCall(
+	{ invoker: 'public' },
+	async (request) => {
+		try {
+			const uid = authenticatedUid(request.auth)
+			const command = parseOnlineGameCommand(request.data)
+			return await submitCommandForTable(database, uid, command)
+		} catch (error) {
+			callableError(error)
+		}
+	},
+)
 
 export const initializeGameWhenTableIsSeated = onDocumentUpdated(
 	'tables/{tableId}',
