@@ -70,6 +70,8 @@ describe('table presentation privacy and actions', () => {
 		expect(markup).toContain('Request rematch')
 		expect(markup).toContain('Your opponent has requested a rematch.')
 		expect(markup).toContain('Return to menu')
+		expect(markup).toContain('result-action-buttons')
+		expect(markup.indexOf('rematch-status')).toBeLessThan(markup.indexOf('Request rematch'))
 	})
 
 	it('places the Draw deck before the arena cards and the Monster deck after them', () => {

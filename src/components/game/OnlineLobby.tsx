@@ -67,12 +67,14 @@ function OnlineMatch({
 	client,
 	onBack,
 	onForget,
+	onReturnToMenu,
 }: {
 	session: OnlineTableSession
 	uid: string
 	client: OnlineTableClient
 	onBack: () => void
 	onForget: () => void
+	onReturnToMenu: () => void
 }) {
 	const [snapshot, setSnapshot] = useState<OnlineGameSnapshot | null>(null)
 	const [pending, setPending] = useState(false)
@@ -167,7 +169,7 @@ function OnlineMatch({
 				actionsResolving={pending || presentation.length > 0}
 				presentationStep={presentation[0] ?? null}
 				onPresentationComplete={() => setPresentation((current) => current.slice(1))}
-				onReturnToMenu={onBack}
+				onReturnToMenu={onReturnToMenu}
 			/>
 		</div>
 	)
@@ -269,6 +271,10 @@ export function OnlineLobby({
 			setIdentity(null)
 			setClient(null)
 		}
+		const returnToMenu = () => {
+			forgetTable()
+			onBack()
+		}
 		if (table.status !== 'waiting' && identity && client) {
 			return (
 				<OnlineMatch
@@ -277,6 +283,7 @@ export function OnlineLobby({
 					client={client}
 					onBack={onBack}
 					onForget={forgetTable}
+					onReturnToMenu={returnToMenu}
 				/>
 			)
 		}

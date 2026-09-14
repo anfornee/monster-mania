@@ -53,7 +53,16 @@ export function MatchResultDialog({
 			{onRequestRematch || onPlayAgain || onReturnToMenu ? (
 				<div className="result-actions">
 					{onRequestRematch ? (
-						<>
+						<p className="rematch-status" role="status" aria-live="polite">
+							{rematchRequested
+								? 'Waiting for your opponent to accept a rematch.'
+								: opponentRematchRequested
+									? 'Your opponent has requested a rematch.'
+									: 'Both players must request a rematch before a new match begins.'}
+						</p>
+					) : null}
+					<div className="result-action-buttons">
+						{onRequestRematch ? (
 							<button
 								type="button"
 								className="primary-button"
@@ -63,17 +72,10 @@ export function MatchResultDialog({
 							>
 								{rematchPending ? 'Requesting rematch…' : rematchRequested ? 'Rematch requested' : 'Request rematch'}
 							</button>
-							<p className="rematch-status" role="status" aria-live="polite">
-								{rematchRequested
-									? 'Waiting for your opponent to accept a rematch.'
-									: opponentRematchRequested
-										? 'Your opponent has requested a rematch.'
-										: 'Both players must request a rematch before a new match begins.'}
-							</p>
-						</>
-					) : null}
-					{onPlayAgain ? <button type="button" className="primary-button" onClick={onPlayAgain} autoFocus>Play again</button> : null}
-					{onReturnToMenu ? <button type="button" className="secondary-button" onClick={onReturnToMenu}>Return to menu</button> : null}
+						) : null}
+						{onPlayAgain ? <button type="button" className="primary-button" onClick={onPlayAgain} autoFocus>Play again</button> : null}
+						{onReturnToMenu ? <button type="button" className="secondary-button" onClick={onReturnToMenu}>Return to menu</button> : null}
+					</div>
 				</div>
 			) : null}
 		</dialog>
