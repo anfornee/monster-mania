@@ -514,7 +514,7 @@ button:disabled { cursor: not-allowed; opacity: .46; }
 	.requirement-strip { flex-wrap: wrap; }
 	.player-seat-header { align-items: start; }
 	.player-hand { padding-inline: .15rem; }
-	.inspector-layout { grid-template-columns: 1fr; max-height: 82vh; overflow: auto; }
+	.inspector-layout { grid-template-columns: 1fr; max-height: 82vh; margin: -.375rem; padding: .375rem; overflow: auto; }
 	.inspector-layout > img { width: min(16rem, 72vw); margin: 0 auto; }
 	.inspector-copy h2 { font-size: 2rem; }
 	.sandbox-toolbar { align-items: stretch; flex-direction: column; }

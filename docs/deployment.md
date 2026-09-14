@@ -156,7 +156,7 @@ Record the deployed Functions revision and test result. Until this checklist inc
 
 ## Static assets and troubleshooting
 
-Vite fingerprints imported JS/CSS. Files copied from `public/` keep stable paths; bump `GAME_ASSET_VERSION` when replacing an image at the same public path. There is currently no service worker or custom Firebase cache policy.
+Vite fingerprints imported JS/CSS. Files copied from `public/` keep stable paths; bump `GAME_ASSET_VERSION` when replacing an image at the same public path. The production build generates `sw.js`, which precaches the application shell and runtime-caches versioned artwork while leaving Firebase traffic network-only. Hosting serves the worker and static manifest with `Cache-Control: no-cache`; confirm those headers after deployment and never add Firebase API endpoints to service-worker caches.
 
 - Rules deployment 403: confirm the printed principal and `roles/firebaserules.admin` binding.
 - Index deployment denied: confirm `roles/datastore.indexAdmin`.

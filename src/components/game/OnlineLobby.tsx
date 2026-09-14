@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { GameAction, GameState } from '../../game/engine/types'
+import { subscribeToAppForeground } from '../../game/network/firebase/appLifecycle'
 import {
 	ensureMultiplayerIdentity,
 	type MultiplayerIdentity,
@@ -9,6 +10,7 @@ import {
 	type OnlineTableClient,
 } from '../../game/network/firebase/firestoreTableClient'
 import { OnlineTableError, type OnlineTableSession } from '../../game/network/firebase/onlineTable'
+import { withOnlineRequestTimeout } from '../../game/network/firebase/onlineRequestTimeout'
 import type { OnlineGameSnapshot } from '../../game/network/onlineGame'
 import { getGameAnnouncement } from '../../game/presentation/announcements'
 import type { GamePresentationStep } from '../../game/presentation/presentationSequence'
@@ -81,12 +83,20 @@ function OnlineMatch({
 	const [rematchPending, setRematchPending] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 	const [presentation, setPresentation] = useState<GamePresentationStep[]>([])
+	const [listenerGeneration, setListenerGeneration] = useState(0)
 	const previousState = useRef<GameState | null>(null)
 	const lastRevision = useRef(-1)
 
+	useEffect(() => subscribeToAppForeground(
+		() => setListenerGeneration((generation) => generation + 1),
+	), [])
+
 	useEffect(() => {
 		let active = true
-		void client.initializeGame(session.table.id).catch((initializationError) => {
+		void withOnlineRequestTimeout(
+			client.initializeGame(session.table.id),
+			'The match is taking too long to initialize. Reopen the Table to reconnect.',
+		).catch((initializationError) => {
 			if (active) setError(messageFor(initializationError))
 		})
 		const unsubscribe = client.watchGame(
@@ -108,14 +118,17 @@ function OnlineMatch({
 			active = false
 			unsubscribe()
 		}
-	}, [client, session.table.id, uid])
+	}, [client, listenerGeneration, session.table.id, uid])
 
 	const submit = async (action: GameAction) => {
 		if (!snapshot || pending) return
 		setPending(true)
 		setError(null)
 		try {
-			await client.submitAction(session.table.id, snapshot.revision, action)
+			await withOnlineRequestTimeout(
+				client.submitAction(session.table.id, snapshot.revision, action),
+				'The Table did not respond. Check your connection and try again.',
+			)
 		} catch (submissionError) {
 			setPending(false)
 			setError(messageFor(submissionError))
@@ -127,7 +140,10 @@ function OnlineMatch({
 		setRematchPending(true)
 		setError(null)
 		try {
-			await client.requestRematch(session.table.id)
+			await withOnlineRequestTimeout(
+				client.requestRematch(session.table.id),
+				'The rematch request timed out. Check your connection and try again.',
+			)
 		} catch (requestError) {
 			setError(messageFor(requestError))
 		} finally {
@@ -193,13 +209,25 @@ export function OnlineLobby({
 		storedSession ? 'Restoring your Table…' : null,
 	)
 	const [error, setError] = useState<string | null>(null)
+	const [listenerGeneration, setListenerGeneration] = useState(0)
+
+	useEffect(() => subscribeToAppForeground(
+		() => setListenerGeneration((generation) => generation + 1),
+	), [])
 
 	useEffect(() => {
 		if (!storedSession) return
 		let active = true
-		void Promise.all([identityProvider(), clientProvider()])
-			.then(async ([restoredIdentity, restoredClient]) => {
-				const restored = await restoredClient.resumeTable(restoredIdentity.uid, storedSession.tableId)
+		const restoreRequest = async () => {
+			const [restoredIdentity, restoredClient] = await Promise.all([identityProvider(), clientProvider()])
+			const restored = await restoredClient.resumeTable(restoredIdentity.uid, storedSession.tableId)
+			return { restoredIdentity, restoredClient, restored }
+		}
+		void withOnlineRequestTimeout(
+			restoreRequest(),
+			'Restoring the Table timed out. Check your connection and try again.',
+		)
+			.then(({ restoredIdentity, restoredClient, restored }) => {
 				if (!active) return
 				setIdentity(restoredIdentity)
 				setClient(restoredClient)
@@ -231,11 +259,12 @@ export function OnlineLobby({
 			},
 			(watchError) => setError(watchError.message),
 		)
-	}, [client, identity, watchedTableId])
+	}, [client, identity, listenerGeneration, watchedTableId])
 
 	const establishSession = async (
 		busy: string,
 		operation: (tableClient: OnlineTableClient, uid: string, name: string) => Promise<OnlineTableSession>,
+		timeoutMessage?: string,
 	) => {
 		const nameError = validatePlayerName(playerName)
 		if (nameError) {
@@ -245,9 +274,16 @@ export function OnlineLobby({
 		setBusyMessage(busy)
 		setError(null)
 		try {
-			const [nextIdentity, nextClient] = await Promise.all([identityProvider(), clientProvider()])
-			const normalizedName = normalizePlayerName(playerName)
-			const nextSession = await operation(nextClient, nextIdentity.uid, normalizedName)
+			const sessionRequest = async () => {
+				const [nextIdentity, nextClient] = await Promise.all([identityProvider(), clientProvider()])
+				const normalizedName = normalizePlayerName(playerName)
+				const nextSession = await operation(nextClient, nextIdentity.uid, normalizedName)
+				return { nextIdentity, nextClient, nextSession, normalizedName }
+			}
+			const result = timeoutMessage
+				? await withOnlineRequestTimeout(sessionRequest(), timeoutMessage)
+				: await sessionRequest()
+			const { nextIdentity, nextClient, nextSession, normalizedName } = result
 			savePlayerName(window.localStorage, normalizedName)
 			saveOnlineTableSession(window.localStorage, {
 				tableId: nextSession.table.id,
@@ -355,6 +391,7 @@ export function OnlineLobby({
 						void establishSession(
 							'Joining the Table…',
 							(tableClient, uid, name) => tableClient.joinTable(uid, name, joinCode),
+							'Joining the Table timed out. Check your connection and try again.',
 						)
 					}}>
 						<h2>Join Table</h2>

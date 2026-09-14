@@ -6,6 +6,11 @@ import { getGameAnnouncement } from './announcements'
 import { getActionPresentationSteps } from './presentationSequence'
 
 describe('AI presentation pacing', () => {
+	it('keeps announcements and opponent card reveals on screen long enough to read', () => {
+		expect(GAME_TIMING.announcement).toBe(3450)
+		expect(GAME_TIMING.opponentCardReveal).toBe(2625)
+	})
+
 	it('uses a longer thinking beat before shorter between-action beats', () => {
 		const state = createSandboxScenario('fresh-game').state
 		expect(getComputerActionDelay(state, true)).toBe(GAME_TIMING.aiThink)

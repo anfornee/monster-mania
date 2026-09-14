@@ -72,13 +72,13 @@ export const CORE_REGULAR_MONSTERS = [
 	monster('boom-boom', 'Boom Boom', 1, ['spear', 'gun']),
 	monster('rocket-chomper', 'Rocket Chomper', 1, ['grenade', 'spear']),
 	monster('wacker', 'Wacker', 1, ['mace', 'sword']),
-	monster('chomper', 'Chomper', 1, ['grenade', 'sword']),
+	monster('chomper', 'Chomper', 1, ['grenade', 'spear']),
 	monster('slice-and-dice', 'Slice and Dice', 1, ['sword', 'spear']),
 	monster('pincher', 'Pincher', 2, ['grenade', 'spear', 'sword']),
 	monster('rock-crab', 'Rock Crab', 2, ['grenade', 'gun', 'bow']),
 	monster('ground-worm', 'Ground Worm', 2, ['grenade', 'gun', 'mace']),
 	monster('spikey', 'Spikey', 2, ['bow', 'sword', 'spear']),
-	monster('kraken', 'Kraken', 2, ['bow', 'gun', 'grenade']),
+	monster('kraken', 'Kraken', 2, ['gun', 'grenade', 'spear']),
 	monster('thing', 'Thing', 3, ['gun', 'spear', 'grenade', 'bow']),
 ] satisfies MonsterDefinition[]
 

@@ -576,7 +576,7 @@ export const monsters = [
 		id: 'chomper',
 		name: 'Chomper',
 		points: 1,
-		requiredWeapons: ['grenade', 'sword'],
+		requiredWeapons: ['grenade', 'spear'],
 	},
 	{
 		id: 'slice-and-dice',
@@ -612,7 +612,7 @@ export const monsters = [
 		id: 'kraken',
 		name: 'Kraken',
 		points: 2,
-		requiredWeapons: ['bow', 'gun', 'grenade'],
+		requiredWeapons: ['gun', 'grenade', 'spear'],
 	},
 	{
 		id: 'thing',

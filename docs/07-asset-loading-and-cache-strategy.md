@@ -45,11 +45,13 @@ A failed critical menu asset keeps the boot screen visible with a player-safe Re
 
 ## Browser caching and invalidation
 
-No service worker is installed. The project has no existing PWA runtime, and adding one would introduce update lifecycle and stale active-match risks without being necessary for the current online-first game. The preloader works through ordinary image requests, so repeat visits use the browser's normal memory/disk HTTP cache when the production host permits caching.
+A Workbox service worker generated during the production build precaches the application shell for resilient repeat visits and offline Solo access. Game-visible artwork enters a dedicated runtime cache as the existing manifest-driven preloader fetches it; versioned asset query strings remain part of each cache key. Firebase configuration, Auth, Firestore, and Callable Function traffic is explicitly network-only; the worker never caches Online Table data or API responses.
+
+Updated workers use the normal waiting lifecycle instead of forcing control or reloading an active match. Once all pages using the previous worker close, the new worker activates and removes obsolete precache entries. Firebase Hosting serves `sw.js` and `manifest.json` with `Cache-Control: no-cache` so installed clients check for updates without caching the update metadata itself.
 
 Public assets keep stable filenames, so every game-visible URL receives the query version from `src/game/assets/assetVersion.ts`. **Bump `GAME_ASSET_VERSION` whenever an existing public image is replaced in place.** That produces a new request URL without editing components or card definitions. New files naturally have new paths.
 
-Production hosting should serve HTML with revalidation and may give versioned image URLs a long cache lifetime. Vite-hashed JS/CSS bundles already change URL after each build. The static `/manifest.json` remains the only web app manifest and is not generated or replaced by a plugin.
+Production hosting should serve HTML with revalidation and may give versioned image URLs a long cache lifetime. Vite-hashed JS/CSS bundles already change URL after each build. The static `/manifest.json` remains the only web app manifest; the PWA build plugin generates only the service worker and its revisioned precache manifest.
 
 ## Accessibility and reduced motion
 
@@ -71,5 +73,7 @@ Run the standard project checks and verify the following in a real browser:
 4. Temporarily break a gameplay asset path: the menu should still appear and the failure should be logged.
 5. Temporarily break a critical path: the Retry state should appear within the request timeout.
 6. Enable reduced motion: the logo should not visibly pulse and transitions should be effectively instant.
+7. Build and serve production, load once, then disable the network: the menu, card gallery, and Solo Game shell should remain available while Online Table operations report network failure.
+8. Deploy a changed build while a match is open: the active client must not reload automatically; close all game clients and reopen to activate the updated worker.
 
 Unit tests cover progress calculation, completion counts, decode waiting, duplicate URLs, critical/non-critical failure classification, retry, manifest derivation, and boot-screen status markup.

@@ -77,6 +77,10 @@ Firebase anonymous identity is created only during create, join, or restoration.
 
 On refresh, the same anonymous UID restores its seat, reattaches the two permitted listeners, and calls the idempotent initializer. Existing authoritative state is reused and never redealt. Anonymous identity has no cross-device recovery.
 
+The web app also reattaches its lobby and game listeners after returning from a hidden state or the browser back-forward cache. This guards Home Screen web apps on iOS against a suspended Firestore listener that does not invoke its error callback. The service worker caches only the application shell and artwork; all Firebase configuration, identity, database, and callable traffic remains network-only.
+
+Join, restore, initialization, command, and rematch waits use a bounded client timeout so a transport that silently stalls cannot leave controls disabled indefinitely. Retrying join is safe because the transactional guest claim recognizes the same authenticated UID; authoritative commands remain revision-checked and idempotency-protected server-side.
+
 ## Security boundary
 
 Firestore Rules retain tightly scoped browser writes for Table creation and the one-time guest claim. They deny collection listing, arbitrary Table updates, deletion, all writes to private documents, and every read/write to `authority`. A participant can read only its own private document. Admin SDK writes from Functions bypass Rules and are the only authoritative gameplay writes.

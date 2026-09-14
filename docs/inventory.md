@@ -108,7 +108,7 @@ Each core 1-point Monster requires **2 Weapons**.
 | Boom Boom      | Spear + Gun      |      1 |
 | Rocket Chopper | Grenade + Spear  |      1 |
 | Wacker         | Mace + Sword     |      1 |
-| Chomper        | Grenade + Sword  |      1 |
+| Chomper        | Grenade + Spear  |      1 |
 | Slice and Dice | Sword + Spear    |      1 |
 
 **1-point Monsters: 11**
@@ -127,7 +127,7 @@ Each core 2-point Monster requires **3 Weapons**.
 | Rock Crab   | Grenade + Gun + Bow      |      2 |
 | Ground Worm | Grenade + Gun + Mace     |      2 |
 | Spikey      | Bow + Sword + Spear      |      2 |
-| Kraken      | Bow + Gun + Grenade      |      2 |
+| Kraken      | Gun / Rifle + Grenade + Spear |      2 |
 
 **2-point Monsters: 5**
 
