@@ -173,7 +173,7 @@ The Infinity Beast is the core set's dedicated Sudden Death Monster and is **not
 
 | Monster            | Required Weapons      | Value              |
 | ------------------ | --------------------- | ------------------ |
-| The Infinity Beast | Grenade + Sword + Gun | Infinite / Victory |
+| The Infinity Beast | Gun / Rifle + Spear + Grenade + Sword | Infinite / Victory |
 
 ## Infinity Beast Rules
 
@@ -185,7 +185,7 @@ During Sudden Death:
 * The Ultimate Weapon is removed from the game.
 * Maximum hand size is reduced from 5 cards to 4 cards.
 * Action cards continue to function normally.
-* The Infinity Beast requires Grenade + Sword + Gun.
+* The Infinity Beast requires the complete four-Weapon hand: Gun / Rifle + Spear + Grenade + Sword.
 * The first player to defeat The Infinity Beast immediately wins.
 
 The Infinity Beast does not add numeric points to a player's normal score. Its **Infinite Points** presentation represents immediate victory.

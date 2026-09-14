@@ -106,9 +106,9 @@ function suddenDeathState(beatable: boolean): GameState {
 	const state = tieState()
 	arrangeCards(state, CORE_CATALOG, {
 		playerOne: beatable
-			? ['grenade', 'sword', 'gun', 'draw-1']
+			? ['gun', 'spear', 'grenade', 'sword']
 			: ['bow', 'bow', 'mace', 'draw-1'],
-		playerTwo: ['grenade', 'sword', 'gun', 'draw-2'],
+		playerTwo: ['bow', 'mace', 'spear', 'draw-2'],
 	})
 	const ultimateLocations = [state.drawPile, state.discardPile, ...state.players.map((player) => player.hand)]
 	for (const zone of ultimateLocations) {

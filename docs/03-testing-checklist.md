@@ -177,7 +177,7 @@ Always:
 - [ ] Players above 4 must discard down
 - [ ] Ultimate Weapon is removed
 - [ ] Black Hole is therefore unavailable
-- [ ] Required Weapons are Grenade + Sword + Gun
+- [ ] Required Weapons are the complete four-Weapon hand: Gun / Rifle + Spear + Grenade + Sword
 - [ ] Action Phase remains available
 
 ---

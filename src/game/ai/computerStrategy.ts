@@ -81,6 +81,7 @@ function compareDiscardCards(
 	left: PlayerCardInstance,
 	right: PlayerCardInstance,
 	catalog: GameCatalog,
+	protectedCardInstanceIds?: ReadonlySet<string>,
 ): number {
 	const categoryOrder = {
 		weapon: 0,
@@ -90,11 +91,42 @@ function compareDiscardCards(
 	const leftCategory = catalog.playerCards[left.definitionId]?.category
 	const rightCategory = catalog.playerCards[right.definitionId]?.category
 	return (
+		(protectedCardInstanceIds?.has(left.instanceId) ? 1 : 0) -
+			(protectedCardInstanceIds?.has(right.instanceId) ? 1 : 0) ||
 		(leftCategory === undefined ? -1 : categoryOrder[leftCategory]) -
 			(rightCategory === undefined ? -1 : categoryOrder[rightCategory]) ||
 		left.definitionId.localeCompare(right.definitionId) ||
 		left.instanceId.localeCompare(right.instanceId)
 	)
+}
+
+function getSuddenDeathProtectedCards(
+	state: GameState,
+	playerId: PlayerId,
+	catalog: GameCatalog,
+): ReadonlySet<string> {
+	if (state.mode !== 'sudden-death') {
+		return new Set()
+	}
+	const player = getPlayer(state, playerId)
+	if (!player) {
+		return new Set()
+	}
+	const requiredCounts = new Map<string, number>()
+	for (const weaponId of catalog.suddenDeathMonster.requiredWeapons) {
+		requiredCounts.set(weaponId, (requiredCounts.get(weaponId) ?? 0) + 1)
+	}
+	const protectedIds = new Set<string>()
+	for (const [weaponId, requiredCount] of requiredCounts) {
+		const matchingCards = player.hand.filter(
+			(card) => {
+				const definition = catalog.playerCards[card.definitionId]
+				return definition?.category === 'weapon' && definition.weaponId === weaponId
+			},
+		)
+		matchingCards.slice(0, requiredCount).forEach((card) => protectedIds.add(card.instanceId))
+	}
+	return protectedIds
 }
 
 function chooseForcedDiscard(
@@ -110,9 +142,12 @@ function chooseForcedDiscard(
 		return legalAction(state, { type: 'CONFIRM_DISCARD', playerId }, catalog)
 	}
 	const selectedIds = new Set(pending.selectedCardInstanceIds)
+	const protectedCardInstanceIds = getSuddenDeathProtectedCards(state, playerId, catalog)
 	const card = getPlayer(state, playerId)?.hand
 		.filter((candidate) => !selectedIds.has(candidate.instanceId))
-		.sort((left, right) => compareDiscardCards(left, right, catalog))[0]
+		.sort((left, right) =>
+			compareDiscardCards(left, right, catalog, protectedCardInstanceIds),
+		)[0]
 	return card
 		? legalAction(
 				state,

@@ -86,7 +86,8 @@ export const INFINITY_BEAST: MonsterDefinition = {
 	id: 'the-infinity-beast',
 	name: 'The Infinity Beast',
 	points: 'infinity',
-	requiredWeapons: ['grenade', 'sword', 'gun'],
+	// `gun` is the stable card id displayed to players as Gun / Rifle.
+	requiredWeapons: ['gun', 'spear', 'grenade', 'sword'],
 	assetPath: asset('monsters/the-infinity-beast-card.jpg'),
 	lore: 'A creature beyond points. Defeating it ends Sudden Death immediately.',
 	isSuddenDeath: true,

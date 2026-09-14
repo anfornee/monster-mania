@@ -127,6 +127,50 @@ describe('heuristicComputerStrategy', () => {
 		expect(chooseComputerAction(afterSecond, computerId)?.type).toBe('CONFIRM_DISCARD')
 	})
 
+	it('preserves the Sudden Death four-Weapon kit during forced discard', () => {
+		const state = gameWithComputerTurn()
+		state.mode = 'sudden-death'
+		state.activeSuddenDeathMonsterId = 'the-infinity-beast'
+		setComputerHand(state, [
+			card('gun'),
+			card('spear'),
+			card('grenade'),
+			card('sword'),
+			card('draw-1'),
+		])
+		state.phase = 'forced-discard'
+		state.turn.actionPhaseOpen = false
+		state.pendingDiscard = {
+			playerId: computerId,
+			requiredCount: 1,
+			selectedCardInstanceIds: [],
+			reason: 'action',
+			remainingSetupPlayerIds: [],
+		}
+
+		expect(chooseComputerAction(state, computerId)).toMatchObject({
+			type: 'SELECT_DISCARD',
+			cardInstanceId: 'draw-1-test',
+		})
+	})
+
+	it('recognizes the complete four-Weapon Sudden Death kit', () => {
+		const state = gameWithComputerTurn()
+		state.mode = 'sudden-death'
+		state.activeSuddenDeathMonsterId = 'the-infinity-beast'
+		setComputerHand(state, [card('gun'), card('spear'), card('grenade'), card('sword')])
+		state.drawPile = []
+		state.discardPile = []
+		state.phase = 'action'
+		state.turn.actionPhaseOpen = true
+
+		expect(chooseComputerAction(state, computerId)).toEqual({
+			type: 'DEFEAT_MONSTER',
+			playerId: computerId,
+			monsterId: 'the-infinity-beast',
+		})
+	})
+
 	it('skips when it cannot draw or defeat a Monster', () => {
 		const state = gameWithComputerTurn()
 		setComputerHand(state, [card('bow')])

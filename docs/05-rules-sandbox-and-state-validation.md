@@ -690,9 +690,10 @@ For the core set:
 
 - Sudden Death Monster is The Infinity Beast
 - Infinity Beast requires:
+	- Gun / Rifle
+	- Spear
 	- Grenade
 	- Sword
-	- Gun
 
 The helper should produce a state from which Sudden Death can be played normally.
 

@@ -228,4 +228,6 @@ The tied players continue taking turns using the normal rules, including the Act
 
 The first tied player to defeat the Sudden Death Monster immediately wins the game.
 
+In the core set, The Infinity Beast requires the complete four-Weapon hand: Gun / Rifle + Spear + Grenade + Sword.
+
 The Sudden Death Monster does not award normal points. Defeating it determines the winner directly.

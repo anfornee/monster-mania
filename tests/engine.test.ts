@@ -362,6 +362,22 @@ describe('scoring and Sudden Death', () => {
 		expect(result.state.winnerId).toBe('player-1')
 		expect(getPlayerScore(result.state, 'player-1', CORE_CATALOG)).toBe(12)
 	})
+
+	it('requires all four Infinity Beast Weapons, including Spear', () => {
+		const state = createSandboxScenario('infinity-beast-beatable').state
+		const player = state.players.find((candidate) => candidate.id === 'player-1')!
+		player.hand = player.hand.filter((card) => card.definitionId !== 'spear')
+
+		expect(CORE_CATALOG.suddenDeathMonster.requiredWeapons).toEqual([
+			'gun',
+			'spear',
+			'grenade',
+			'sword',
+		])
+		expect(
+			canDefeatMonster(state, 'player-1', 'the-infinity-beast', CORE_CATALOG),
+		).toBe(false)
+	})
 })
 
 describe('validation, expansions, and persistence', () => {

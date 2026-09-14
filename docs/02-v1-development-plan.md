@@ -89,6 +89,8 @@ Initial deterministic heuristic:
 5. If no normal defeat is available, use the Ultimate Weapon on the highest-point eligible regular Monster.
 6. Otherwise skip.
 
+During Sudden Death forced-discard cleanup, preserve one copy of each weapon required by the active Sudden Death Monster and discard unrelated or duplicate cards first.
+
 Automated tests must show that the strategy chooses legal actions, chains Actions, uses deterministic tie-breaking, defeats available targets, uses Black Hole only when appropriate, skips when required, and does not mutate its input.
 
 ### Game board

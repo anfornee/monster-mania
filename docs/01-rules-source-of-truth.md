@@ -501,9 +501,12 @@ If a Draw Action takes a player's hand above 4 cards:
 
 The Infinity Beast requires:
 
+- Gun / Rifle
+- Spear
 - Grenade
 - Sword
-- Gun / Rifle
+
+Because Sudden Death's hand limit is four, this is a complete four-card hand rather than a partial requirement.
 
 The first tied player to defeat The Infinity Beast wins immediately.
 
@@ -682,7 +685,7 @@ export const infinityBeast = {
 	id: 'infinity-beast',
 	name: 'The Infinity Beast',
 	points: 'infinity',
-	requiredWeapons: ['grenade', 'sword', 'gun'],
+	requiredWeapons: ['gun', 'spear', 'grenade', 'sword'],
 } as const;
 ```
 
