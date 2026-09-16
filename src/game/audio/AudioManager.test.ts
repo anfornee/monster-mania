@@ -162,7 +162,9 @@ describe('AudioManager', () => {
 	it('keeps the requested fade and mix adjustments in configuration', () => {
 		expect(AUDIO_TRANSITION_MS).toBe(1_200)
 		expect(AUDIO_MUTE_FADE_MS).toBe(320)
+		expect(AUDIO_MANIFEST.menu.approximateDurationMs).toBe(152_000)
 		expect(AUDIO_MANIFEST.ambience.volume).toBe(.9)
+		expect(AUDIO_MANIFEST.ambience.approximateDurationMs).toBe(21_000)
 		expect(AUDIO_MANIFEST.ambience.crossfadeMs).toBe(12_000)
 		expect(AUDIO_MANIFEST['sudden-death'].volume).toBe(.93)
 		expect(AUDIO_MANIFEST['sudden-death'].crossfadeMs).toBe(5_000)

@@ -41,7 +41,7 @@ export const AUDIO_MANIFEST = {
 		volume: .9,
 		preloadTier: 'priority',
 		loopMode: 'native',
-		approximateDurationMs: 164_000,
+		approximateDurationMs: 152_000,
 	},
 	ambience: {
 		id: 'ambience',
@@ -50,7 +50,7 @@ export const AUDIO_MANIFEST = {
 		volume: .9,
 		preloadTier: 'priority',
 		loopMode: 'crossfade',
-		approximateDurationMs: 52_632,
+		approximateDurationMs: 21_000,
 		crossfadeMs: 12_000,
 	},
 	'sudden-death': {

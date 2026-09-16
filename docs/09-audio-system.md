@@ -32,7 +32,7 @@ AudioProvider (preference, initial playback attempt, gesture fallback, visibilit
 
 Scene changes fade between long-form tracks over 1.2 seconds. Disabling sound immediately stops SFX and fades long-form audio over 0.32 seconds; enabling it resumes the scene that the application currently wants.
 
-For crossfade loops, the alternate player is loaded when the scene starts. The manager uses the earlier of the browser-reported duration and the measured manifest duration, starts the alternate player before the overlap, and waits for its `play` event before fading the current player. The tavern file's measured decoded duration is 52.632 seconds.
+For crossfade loops, the alternate player is loaded when the scene starts. The manager uses the earlier of the browser-reported duration and the manifest duration, starts the alternate player before the overlap, and waits for its `play` event before fading the current player. The current tavern ambience is approximately 21 seconds long; the menu track is approximately 2 minutes 32 seconds.
 
 ## Authoritative event mapping
 
