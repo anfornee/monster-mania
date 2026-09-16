@@ -19,6 +19,10 @@ export function AudioProvider({ children }: { children: ReactNode }) {
 	useEffect(() => {
 		if (!enabled) return
 		manager.prepareCriticalSfx()
+		// Try the menu scene as soon as the boot screen hands off to the app.
+		// Browsers that require a gesture will reject this attempt; Howler keeps
+		// the active sound ready to retry when the listener below receives one.
+		manager.unlock()
 		const unlock = () => {
 			manager.unlock()
 			document.removeEventListener('pointerdown', unlock, true)

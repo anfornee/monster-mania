@@ -47,7 +47,7 @@ export const AUDIO_MANIFEST = {
 		id: 'ambience',
 		src: audioPath('tavern-ambience.mp3'),
 		bus: 'ambience',
-		volume: 1.25,
+		volume: 1,
 		preloadTier: 'priority',
 		loopMode: 'crossfade',
 		approximateDurationMs: 52_632,

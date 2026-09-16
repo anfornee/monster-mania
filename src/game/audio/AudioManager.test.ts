@@ -155,8 +155,17 @@ describe('AudioManager', () => {
 	})
 
 	it('keeps the requested ambience and Monster defeat mix adjustments in configuration', () => {
-		expect(AUDIO_MANIFEST.ambience.volume).toBe(1.25)
+		expect(AUDIO_MANIFEST.ambience.volume).toBe(1)
 		expect(AUDIO_MANIFEST['monster-defeated'].volume).toBe(.85)
+	})
+
+	it('can attempt the desired scene again after a provider lifecycle cleanup', () => {
+		const backend = new FakeBackend()
+		const manager = managerWith(backend)
+		manager.unlock()
+		manager.dispose()
+		manager.unlock()
+		expect(backend.playCount('menu')).toBe(2)
 	})
 
 	it('rotates card sounds without immediately repeating a variant', () => {

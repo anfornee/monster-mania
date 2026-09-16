@@ -176,6 +176,8 @@ export class AudioManager {
 		if (this.active?.loopTimer) this.scheduler.clearTimeout(this.active.loopTimer)
 		for (const sound of this.longFormSounds.values()) sound.stop()
 		this.active = null
+		this.completedScene = null
+		this.unlocked = false
 	}
 
 	private canPlay(): boolean {

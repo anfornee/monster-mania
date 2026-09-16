@@ -7,7 +7,7 @@
 All sound is routed through the shared `AudioManager`. Components may select a scene or report authoritative game state, but they must not construct `Audio`, `Howl`, or browser audio nodes directly.
 
 ```text
-AudioProvider (preference, first-gesture unlock, visibility)
+AudioProvider (preference, initial playback attempt, gesture fallback, visibility)
     -> AudioManager (scene transitions, event dedupe, fades, variants)
         -> music / ambience / SFX buses
             -> Howler playback backend
@@ -50,7 +50,7 @@ Audio remains presentation-only. It never changes `GameState`, affects legal act
 
 Sound defaults on. The fixed sound button exposes its state with `aria-pressed` and persists it under `monster-mania:audio-enabled:v1`. The preference is restored before any playback attempt.
 
-Browsers may block audible playback until a real pointer or keyboard gesture. `AudioProvider` listens for that first gesture, resumes Howler, and starts the current desired scene. Playback errors may retry after Howler's unlock event only while the same sound is still active. Returning to a visible tab resumes the shared audio context; it does not duplicate tracks.
+`AudioProvider` attempts to start the menu scene as soon as the boot screen hands off to the application. Browsers may still block audible playback until a real pointer or keyboard gesture; the provider listens for that first gesture and resumes Howler without bypassing the browser policy. Playback errors may retry after Howler's unlock event only while the same sound is still active. Returning to a visible tab resumes the shared audio context; it does not duplicate tracks.
 
 ## Loading and caching
 
