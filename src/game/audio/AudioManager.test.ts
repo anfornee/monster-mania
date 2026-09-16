@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { createSandboxScenario } from '../sandbox/presets'
 import { AudioManager, type AudioScheduler } from './AudioManager'
-import { AUDIO_MANIFEST, type AudioTrackDefinition } from './audioManifest'
+import {
+	AUDIO_MANIFEST,
+	AUDIO_MUTE_FADE_MS,
+	AUDIO_TRANSITION_MS,
+	type AudioTrackDefinition,
+} from './audioManifest'
 import type { AudioPlaybackBackend, AudioSound } from './audioPlayback'
 import { getGameAudioScene } from './gameAudio'
 
@@ -154,8 +159,13 @@ describe('AudioManager', () => {
 		expect(ambienceSounds.every((sound) => sound.playing())).toBe(true)
 	})
 
-	it('keeps the requested ambience and Monster defeat mix adjustments in configuration', () => {
-		expect(AUDIO_MANIFEST.ambience.volume).toBe(1)
+	it('keeps the requested fade and mix adjustments in configuration', () => {
+		expect(AUDIO_TRANSITION_MS).toBe(1_200)
+		expect(AUDIO_MUTE_FADE_MS).toBe(320)
+		expect(AUDIO_MANIFEST.ambience.volume).toBe(.9)
+		expect(AUDIO_MANIFEST.ambience.crossfadeMs).toBe(12_000)
+		expect(AUDIO_MANIFEST['sudden-death'].volume).toBe(.93)
+		expect(AUDIO_MANIFEST['sudden-death'].crossfadeMs).toBe(5_000)
 		expect(AUDIO_MANIFEST['monster-defeated'].volume).toBe(.85)
 	})
 

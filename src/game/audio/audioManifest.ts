@@ -30,8 +30,8 @@ export const AUDIO_BUS_VOLUMES: Record<AudioBus, number> = {
 }
 
 export const AUDIO_MASTER_VOLUME = .9
-export const AUDIO_TRANSITION_MS = 900
-export const AUDIO_MUTE_FADE_MS = 240
+export const AUDIO_TRANSITION_MS = 1_200
+export const AUDIO_MUTE_FADE_MS = 320
 
 export const AUDIO_MANIFEST = {
 	menu: {
@@ -47,21 +47,21 @@ export const AUDIO_MANIFEST = {
 		id: 'ambience',
 		src: audioPath('tavern-ambience.mp3'),
 		bus: 'ambience',
-		volume: 1,
+		volume: .9,
 		preloadTier: 'priority',
 		loopMode: 'crossfade',
 		approximateDurationMs: 52_632,
-		crossfadeMs: 10_000,
+		crossfadeMs: 12_000,
 	},
 	'sudden-death': {
 		id: 'sudden-death',
 		src: audioPath('battle-for-eternity.mp3'),
 		bus: 'music',
-		volume: 1,
+		volume: .93,
 		preloadTier: 'background',
 		loopMode: 'crossfade',
 		approximateDurationMs: 132_000,
-		crossfadeMs: 4_000,
+		crossfadeMs: 5_000,
 	},
 	victory: {
 		id: 'victory',
