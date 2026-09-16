@@ -191,6 +191,18 @@ function GameApplication() {
 		if (screen !== 'solo') audio.playMenuMusic()
 	}, [audio, screen])
 
+	const returnToMenu = useCallback(() => {
+		// Keep this in the click path as well as the screen effect so mobile
+		// browsers can restart menu audio under the user's gesture.
+		audio.playMenuMusic()
+		setScreen('home')
+	}, [audio])
+
+	const openSoloSetup = useCallback(() => {
+		audio.playMenuMusic()
+		setScreen('setup')
+	}, [audio])
+
 	const commitGameState = useCallback((nextState: GameState, handoffToHuman = false) => {
 		if (handoffToHuman && nextState.phase !== 'game-over') setHandoffLocked(true)
 		setError(null)
@@ -325,8 +337,8 @@ function GameApplication() {
 		beginAcceptedTransition(game, action, result.state)
 	}
 
-	if (screen === 'setup') return <NameSetup initialName={playerName} onBack={() => setScreen('home')} onStart={beginSolo} />
-	if (screen === 'online') return <OnlineLobby initialPlayerName={playerName} onBack={() => setScreen('home')} />
+	if (screen === 'setup') return <NameSetup initialName={playerName} onBack={returnToMenu} onStart={beginSolo} />
+	if (screen === 'online') return <OnlineLobby initialPlayerName={playerName} onBack={returnToMenu} />
 	if (screen === 'solo' && game) {
 		return (
 			<div className="game-shell">
@@ -334,13 +346,13 @@ function GameApplication() {
 					<button type="button" className="back-button" onClick={() => {
 						setPendingPresentation(null)
 						aiTurnKey.current = null
-						setScreen('home')
+						returnToMenu()
 					}}>← Tavern</button>
 					<img src={GAME_ASSET_PATHS.logo} alt="Monster Mania" />
 					<button type="button" onClick={() => {
 						setPendingPresentation(null)
 						aiTurnKey.current = null
-						setScreen('setup')
+						openSoloSetup()
 					}}>New game</button>
 				</nav>
 				{error ? <div className="error-banner" role="alert">{error}</div> : null}
@@ -355,7 +367,7 @@ function GameApplication() {
 					onReturnToMenu={() => {
 						setPendingPresentation(null)
 						setGame(null)
-						setScreen('home')
+						returnToMenu()
 					}}
 				/>
 			</div>
@@ -363,7 +375,7 @@ function GameApplication() {
 	}
 
 	const resumableGame = isResumableGame(game) ? game : savedGame
-	return <HomeScreen hasSavedGame={Boolean(resumableGame)} onPlaySolo={() => setScreen('setup')} onResume={() => {
+	return <HomeScreen hasSavedGame={Boolean(resumableGame)} onPlaySolo={openSoloSetup} onResume={() => {
 		if (resumableGame) {
 			setGame(resumableGame)
 			setScreen('solo')

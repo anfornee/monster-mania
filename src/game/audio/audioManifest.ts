@@ -57,7 +57,7 @@ export const AUDIO_MANIFEST = {
 		id: 'sudden-death',
 		src: audioPath('battle-for-eternity.mp3'),
 		bus: 'music',
-		volume: .93,
+		volume: .84,
 		preloadTier: 'background',
 		loopMode: 'crossfade',
 		approximateDurationMs: 132_000,
