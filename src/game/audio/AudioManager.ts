@@ -39,6 +39,7 @@ interface ActiveLongForm {
 	track: AudioTrackDefinition
 	generation: number
 	current: LongFormVoice
+	pending: LongFormVoice | null
 	voices: Set<LongFormVoice>
 	loopTimer: TimerHandle | null
 }
@@ -210,32 +211,53 @@ export class AudioManager {
 		this.generation += 1
 		const track = AUDIO_MANIFEST[scene] as AudioTrackDefinition
 		const generation = this.generation
-		const voice = this.playLongFormVoice(track, 0, AUDIO_TRANSITION_MS)
+		const voice = this.playLongFormVoice(track, 0)
 		const active: ActiveLongForm = {
 			scene,
 			track,
 			generation,
 			current: voice,
+			pending: null,
 			voices: new Set([voice]),
 			loopTimer: null,
 		}
 		this.active = active
-		this.armLongFormVoice(active, voice)
+		if (track.loopMode === 'crossfade') {
+			this.getLongFormSound(track.id as LongFormTrackId, 1).load()
+		}
+		this.fadeInVoiceWhenPlaying(active, voice, AUDIO_TRANSITION_MS, () => {
+			this.armLongFormVoice(active, voice)
+		})
 	}
 
 	private playLongFormVoice(
 		track: AudioTrackDefinition,
 		slot: 0 | 1,
-		fadeMs: number,
 	): LongFormVoice {
 		const sound = this.getLongFormSound(track.id as LongFormTrackId, slot)
-		const targetVolume = getTrackVolume(track)
 		sound.volume(0)
 		const id = sound.play()
 		sound.volume(0, id)
-		if (fadeMs > 0) sound.fade(0, targetVolume, fadeMs, id)
-		else sound.volume(targetVolume, id)
 		return { sound, id, slot }
+	}
+
+	private fadeInVoiceWhenPlaying(
+		active: ActiveLongForm,
+		voice: LongFormVoice,
+		fadeMs: number,
+		onStarted: () => void,
+	): void {
+		let handled = false
+		const start = () => {
+			if (handled || this.active?.generation !== active.generation) return
+			handled = true
+			const targetVolume = getTrackVolume(active.track)
+			if (fadeMs > 0) voice.sound.fade(0, targetVolume, fadeMs, voice.id)
+			else voice.sound.volume(targetVolume, voice.id)
+			onStarted()
+		}
+		if (voice.sound.playing(voice.id)) start()
+		else voice.sound.once('play', start, voice.id)
 	}
 
 	private armLongFormVoice(active: ActiveLongForm, voice: LongFormVoice): void {
@@ -243,7 +265,9 @@ export class AudioManager {
 			const schedule = () => {
 				if (this.active?.generation !== active.generation || active.current !== voice) return
 				const measuredDuration = voice.sound.duration(voice.id) * 1_000
-				const duration = measuredDuration > 0 ? measuredDuration : active.track.approximateDurationMs
+				const duration = Number.isFinite(measuredDuration) && measuredDuration > 0
+					? Math.min(measuredDuration, active.track.approximateDurationMs)
+					: active.track.approximateDurationMs
 				const delay = Math.max(250, duration - (active.track.crossfadeMs ?? 0))
 				active.loopTimer = this.scheduler.setTimeout(
 					() => this.crossfadeLoop(active, voice),
@@ -254,6 +278,11 @@ export class AudioManager {
 			else voice.sound.once('play', schedule, voice.id)
 			voice.sound.once('end', () => {
 				if (this.active?.generation === active.generation && active.current === voice) {
+					if (active.pending) {
+						active.pending.sound.stop(active.pending.id)
+						active.voices.delete(active.pending)
+						active.pending = null
+					}
 					this.crossfadeLoop(active, voice, 0)
 				}
 			}, voice.id)
@@ -270,19 +299,28 @@ export class AudioManager {
 	}
 
 	private crossfadeLoop(active: ActiveLongForm, previous: LongFormVoice, fadeOverride?: number): void {
-		if (this.active?.generation !== active.generation || active.current !== previous) return
+		if (
+			this.active?.generation !== active.generation
+			|| active.current !== previous
+			|| active.pending
+		) return
 		active.loopTimer = null
 		const fadeMs = fadeOverride ?? active.track.crossfadeMs ?? 0
 		const nextSlot: 0 | 1 = previous.slot === 0 ? 1 : 0
-		const next = this.playLongFormVoice(active.track, nextSlot, fadeMs)
-		active.current = next
+		const next = this.playLongFormVoice(active.track, nextSlot)
+		active.pending = next
 		active.voices.add(next)
-		previous.sound.fade(previous.sound.getVolume(previous.id), 0, fadeMs, previous.id)
-		this.scheduler.setTimeout(() => {
-			previous.sound.stop(previous.id)
-			active.voices.delete(previous)
-		}, fadeMs)
-		this.armLongFormVoice(active, next)
+		this.fadeInVoiceWhenPlaying(active, next, fadeMs, () => {
+			if (active.current !== previous || active.pending !== next) return
+			active.pending = null
+			active.current = next
+			previous.sound.fade(previous.sound.getVolume(previous.id), 0, fadeMs, previous.id)
+			this.scheduler.setTimeout(() => {
+				previous.sound.stop(previous.id)
+				active.voices.delete(previous)
+			}, fadeMs)
+			this.armLongFormVoice(active, next)
+		})
 	}
 
 	private stopActiveLongForm(fadeMs: number): void {

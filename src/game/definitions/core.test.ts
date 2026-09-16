@@ -9,11 +9,14 @@ describe('core catalog', () => {
 		])
 	})
 
-	it('requires Rifle, Grenade, and Spear to defeat Kraken', () => {
-		expect(CORE_CATALOG.regularMonsters.kraken.requiredWeapons).toEqual([
-			'gun',
-			'grenade',
-			'spear',
-		])
+	it.each([
+		['top', ['sword', 'grenade']],
+		['smasher', ['mace', 'bow']],
+		['wrecking-snake', ['sword', 'spear']],
+		['boom-boom', ['gun', 'spear']],
+		['spikey', ['sword', 'bow', 'spear']],
+		['kraken', ['grenade', 'gun', 'spear']],
+	])('preserves the intended Weapon display order for %s', (monsterId, requiredWeapons) => {
+		expect(CORE_CATALOG.regularMonsters[monsterId].requiredWeapons).toEqual(requiredWeapons)
 	})
 })

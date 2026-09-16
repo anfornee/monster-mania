@@ -22,7 +22,7 @@ AudioProvider (preference, first-gesture unlock, visibility)
 | Scene or cue | File | Behavior |
 | --- | --- | --- |
 | Tavern menu | `welcome-hunter.mp3` | Native seamless loop |
-| Normal match | `tavern-ambience.mp3` | Two-voice loop with a 6-second crossfade |
+| Normal match | `tavern-ambience.mp3` | Two-voice loop with a 10-second crossfade |
 | Sudden Death | `battle-for-eternity.mp3` | Two-voice loop with a 4-second crossfade |
 | Local victory | `dubs-in-the-chat.mp3` | Plays once |
 | Local loss | `take-the-l.mp3` | Plays once |
@@ -31,6 +31,8 @@ AudioProvider (preference, first-gesture unlock, visibility)
 | Initial or recycled deck shuffle | `shuffle-cards.mp3` | One cue per authoritative shuffle event batch |
 
 Scene changes fade between long-form tracks. Disabling sound immediately stops SFX and fades long-form audio; enabling it resumes the scene that the application currently wants.
+
+For crossfade loops, the alternate player is loaded when the scene starts. The manager uses the earlier of the browser-reported duration and the measured manifest duration, starts the alternate player before the overlap, and waits for its `play` event before fading the current player. The tavern file's measured decoded duration is 52.632 seconds.
 
 ## Authoritative event mapping
 

@@ -100,12 +100,12 @@ Each core 1-point Monster requires **2 Weapons**.
 | Monster        | Required Weapons | Points |
 | -------------- | ---------------- | -----: |
 | Socket         | Gun + Spear      |      1 |
-| Top            | Grenade + Sword  |      1 |
+| Top            | Sword + Grenade  |      1 |
 | Bitty Bitey    | Mace + Spear     |      1 |
 | Flower Trap    | Mace + Bow       |      1 |
-| Smasher        | Bow + Mace       |      1 |
-| Wrecking Snake | Spear + Sword    |      1 |
-| Boom Boom      | Spear + Gun      |      1 |
+| Smasher        | Mace + Bow       |      1 |
+| Wrecking Snake | Sword + Spear    |      1 |
+| Boom Boom      | Gun + Spear      |      1 |
 | Rocket Chopper | Grenade + Spear  |      1 |
 | Wacker         | Mace + Sword     |      1 |
 | Chomper        | Grenade + Spear  |      1 |
@@ -126,8 +126,8 @@ Each core 2-point Monster requires **3 Weapons**.
 | Pincher     | Grenade + Spear + Sword  |      2 |
 | Rock Crab   | Grenade + Gun + Bow      |      2 |
 | Ground Worm | Grenade + Gun + Mace     |      2 |
-| Spikey      | Bow + Sword + Spear      |      2 |
-| Kraken      | Gun / Rifle + Grenade + Spear |      2 |
+| Spikey      | Sword + Bow + Spear      |      2 |
+| Kraken      | Grenade + Gun / Rifle + Spear |      2 |
 
 **2-point Monsters: 5**
 

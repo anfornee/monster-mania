@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createSandboxScenario } from '../sandbox/presets'
 import { AudioManager, type AudioScheduler } from './AudioManager'
-import type { AudioTrackDefinition } from './audioManifest'
+import { AUDIO_MANIFEST, type AudioTrackDefinition } from './audioManifest'
 import type { AudioPlaybackBackend, AudioSound } from './audioPlayback'
 import { getGameAudioScene } from './gameAudio'
 
@@ -68,6 +68,34 @@ function inertScheduler(): AudioScheduler {
 	}
 }
 
+class RecordingScheduler implements AudioScheduler {
+	private nextHandle = 1
+	readonly tasks: Array<{
+		handle: ReturnType<typeof globalThis.setTimeout>
+		callback: () => void
+		delayMs: number
+	}> = []
+
+	setTimeout(callback: () => void, delayMs: number): ReturnType<typeof globalThis.setTimeout> {
+		const handle = this.nextHandle as unknown as ReturnType<typeof globalThis.setTimeout>
+		this.nextHandle += 1
+		this.tasks.push({ handle, callback, delayMs })
+		return handle
+	}
+
+	clearTimeout(handle: ReturnType<typeof globalThis.setTimeout>): void {
+		const index = this.tasks.findIndex((task) => task.handle === handle)
+		if (index >= 0) this.tasks.splice(index, 1)
+	}
+
+	runFirst(delayMs: number): void {
+		const index = this.tasks.findIndex((task) => task.delayMs === delayMs)
+		if (index < 0) throw new Error(`No scheduled audio task found at ${delayMs}ms.`)
+		const [task] = this.tasks.splice(index, 1)
+		task.callback()
+	}
+}
+
 function managerWith(backend: FakeBackend, enabled = true, random = () => 0): AudioManager {
 	return new AudioManager(backend, { enabled, random, scheduler: inertScheduler() })
 }
@@ -107,6 +135,28 @@ describe('AudioManager', () => {
 		expect(backend.playCount('sudden-death')).toBe(1)
 		expect(backend.playCount('victory')).toBe(1)
 		expect(backend.playCount('loss')).toBe(1)
+	})
+
+	it('primes and alternates two ambience players before the measured track ends', () => {
+		const backend = new FakeBackend()
+		const scheduler = new RecordingScheduler()
+		const manager = new AudioManager(backend, { scheduler })
+		manager.unlock()
+		manager.startGameAmbience()
+
+		const ambienceSounds = backend.sounds.get('ambience') ?? []
+		expect(ambienceSounds).toHaveLength(2)
+		expect(ambienceSounds[1].loadCount).toBe(1)
+		scheduler.runFirst(
+			AUDIO_MANIFEST.ambience.approximateDurationMs - AUDIO_MANIFEST.ambience.crossfadeMs,
+		)
+		expect(backend.playCount('ambience')).toBe(2)
+		expect(ambienceSounds.every((sound) => sound.playing())).toBe(true)
+	})
+
+	it('keeps the requested ambience and Monster defeat mix adjustments in configuration', () => {
+		expect(AUDIO_MANIFEST.ambience.volume).toBe(1.25)
+		expect(AUDIO_MANIFEST['monster-defeated'].volume).toBe(.85)
 	})
 
 	it('rotates card sounds without immediately repeating a variant', () => {

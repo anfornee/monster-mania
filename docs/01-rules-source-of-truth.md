@@ -528,7 +528,7 @@ export const monsters = [
 		id: 'top',
 		name: 'Top',
 		points: 1,
-		requiredWeapons: ['grenade', 'sword'],
+		requiredWeapons: ['sword', 'grenade'],
 	},
 	{
 		id: 'bitty-bitey',
@@ -546,19 +546,19 @@ export const monsters = [
 		id: 'smasher',
 		name: 'Smasher',
 		points: 1,
-		requiredWeapons: ['bow', 'mace'],
+		requiredWeapons: ['mace', 'bow'],
 	},
 	{
 		id: 'wrecking-snake',
 		name: 'Wrecking Snake',
 		points: 1,
-		requiredWeapons: ['spear', 'sword'],
+		requiredWeapons: ['sword', 'spear'],
 	},
 	{
 		id: 'boom-boom',
 		name: 'Boom Boom',
 		points: 1,
-		requiredWeapons: ['spear', 'gun'],
+		requiredWeapons: ['gun', 'spear'],
 	},
 	{
 		id: 'rocket-chomper',
@@ -606,13 +606,13 @@ export const monsters = [
 		id: 'spikey',
 		name: 'Spikey',
 		points: 2,
-		requiredWeapons: ['bow', 'sword', 'spear'],
+		requiredWeapons: ['sword', 'bow', 'spear'],
 	},
 	{
 		id: 'kraken',
 		name: 'Kraken',
 		points: 2,
-		requiredWeapons: ['gun', 'grenade', 'spear'],
+		requiredWeapons: ['grenade', 'gun', 'spear'],
 	},
 	{
 		id: 'thing',
