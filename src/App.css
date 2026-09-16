@@ -83,6 +83,28 @@ button:disabled { cursor: not-allowed; opacity: .46; }
 .boot-progress-track span { display: block; height: 100%; background: linear-gradient(90deg, var(--ember), var(--gold)); box-shadow: 0 0 .75rem rgba(242, 194, 76, .65); transition: width 180ms ease; }
 .boot-error p { margin: 1rem 0; color: #eadfe9; }
 .app-runtime.content-visible > :not(.game-boot-screen) { animation: app-reveal 360ms ease both; }
+.sound-toggle {
+	position: fixed;
+	z-index: var(--layer-nav);
+	right: max(.75rem, env(safe-area-inset-right));
+	bottom: max(.75rem, env(safe-area-inset-bottom));
+	display: grid;
+	place-items: center;
+	width: 2.65rem;
+	aspect-ratio: 1;
+	padding: .58rem;
+	color: #291708;
+	background: linear-gradient(135deg, #ffe08a, var(--gold));
+	border: 1px solid #fff0b9;
+	border-radius: 50%;
+	box-shadow: 0 .4rem 1.1rem rgba(20, 6, 1, .52);
+	cursor: pointer;
+}
+.sound-toggle[aria-pressed='false'] { color: #eee5d8; background: rgba(28, 17, 14, .9); border-color: rgba(255, 224, 171, .48); }
+.sound-toggle svg { width: 100%; height: 100%; overflow: visible; fill: currentColor; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.sound-toggle svg path:first-child { stroke: none; }
+.app-update-notice { position: fixed; z-index: var(--layer-nav); left: max(.75rem, env(safe-area-inset-left)); bottom: max(.75rem, env(safe-area-inset-bottom)); display: flex; align-items: center; gap: .7rem; max-width: calc(100% - 5rem); padding: .55rem .65rem .55rem .85rem; color: #f8ecd3; background: rgba(25, 14, 11, .94); border: 1px solid rgba(255, 218, 147, .5); border-radius: 999px; box-shadow: 0 .4rem 1.2rem rgba(10, 3, 1, .55); font-size: .74rem; }
+.app-update-notice button { padding: .38rem .62rem; color: #251508; background: var(--gold); border: 1px solid #fff0b9; border-radius: 999px; font-size: .7rem; font-weight: 850; cursor: pointer; white-space: nowrap; }
 
 /* Tavern entrance */
 .home-screen {
@@ -271,7 +293,7 @@ button:disabled { cursor: not-allowed; opacity: .46; }
 .stack-cards img,
 .empty-card-slot {
 	position: absolute;
-	left: calc(var(--card-index, 0) * 2rem);
+	left: calc(.5rem + var(--card-index, 0) * 2rem);
 	bottom: 0;
 	width: 4.1rem;
 	aspect-ratio: 5 / 7;
@@ -326,7 +348,14 @@ button:disabled { cursor: not-allowed; opacity: .46; }
 .player-seat { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto 1fr; gap: .45rem 1rem; padding-top: .6rem; border-top: 1px solid rgba(255, 220, 158, .25); }
 .player-seat-header { grid-column: 1; display: flex; align-items: center; justify-content: space-between; }
 .player-seat-header h2 small { color: #dbc7a8; font-family: inherit; font-size: .68rem; font-weight: 500; }
-.player-hand { grid-column: 1; display: flex; align-items: end; justify-content: center; gap: clamp(.25rem, .8vw, .75rem); min-width: 0; padding: .3rem .6rem 0; overflow-x: auto; overflow-y: visible; }
+.player-hand-scroll { position: relative; grid-column: 1; min-width: 0; }
+.player-hand { display: flex; align-items: end; justify-content: center; gap: clamp(.25rem, .8vw, .75rem); min-width: 0; padding: .3rem .6rem 0; overflow-x: auto; overflow-y: visible; }
+.hand-scroll-cue { position: absolute; z-index: var(--layer-hover); top: 50%; display: grid; place-items: center; width: 1.5rem; height: 2.4rem; padding: 0; color: #2a1609; background: linear-gradient(135deg, #ffe089, var(--gold)); border: 1px solid #fff0b9; border-radius: 999px; box-shadow: 0 .25rem .7rem rgba(20, 6, 1, .48); cursor: pointer; opacity: .85; transform: translateY(-50%); }
+.hand-scroll-cue-left { left: .15rem; }
+.hand-scroll-cue-right { right: .15rem; }
+.hand-scroll-cue span { font-family: Georgia, serif; font-size: 1.35rem; font-weight: 900; line-height: 1; transform: translateY(-.05rem); }
+.hand-scroll-cue:hover,
+.hand-scroll-cue:focus-visible { filter: brightness(1.08); opacity: 1; }
 .player-card { position: relative; flex: 0 0 var(--card-player-width); padding: 0; background: transparent; border: 2px solid transparent; border-radius: var(--card-radius); box-shadow: var(--card-shadow); overflow: hidden; animation: deal-player-card 360ms cubic-bezier(.2, .75, .2, 1) both; transition: transform 170ms ease, filter 170ms ease, box-shadow 170ms ease; }
 .card-button { cursor: zoom-in; }
 .card-button:hover,
@@ -487,13 +516,14 @@ button:disabled { cursor: not-allowed; opacity: .46; }
 @media (max-width: 900px) {
 	.home-scrim { background: linear-gradient(90deg, rgba(5, 7, 20, .94), rgba(8, 9, 26, .64)); }
 	.hero-copy { width: min(38rem, 76vw); }
-	.game-board { overflow: visible; background-attachment: fixed; }
+	.game-board { overflow: visible; background-color: transparent; background-image: none; }
+	.game-board::before { content: ''; position: fixed; z-index: -2; inset: 0; background-color: #6b2f12; background-image: linear-gradient(rgba(43, 15, 3, .08), rgba(31, 9, 2, .22)), var(--board-background-image); background-position: center top; background-size: cover; pointer-events: none; }
 	.opponent-seat { grid-template-columns: 1fr auto; }
 	.opponent-cards { grid-row: 2; grid-column: 1 / -1; min-width: 0; gap: 2rem; }
 	.seat-score { grid-column: 2; grid-row: 1; }
 	.player-seat { grid-template-columns: 1fr; }
 	.player-seat-header { grid-column: 1; }
-	.player-hand { grid-column: 1; justify-content: start; }
+	.player-hand { justify-content: start; }
 	.turn-controls { grid-column: 1; grid-row: auto; flex-direction: row; justify-content: space-between; }
 	.game-log { position: static; width: 100%; }
 }
@@ -521,7 +551,7 @@ button:disabled { cursor: not-allowed; opacity: .46; }
 	.opponent-seat { min-height: 10rem; }
 	.opponent-cards { justify-content: start; overflow: hidden; }
 	.physical-card-stack.hand .stack-cards { width: 13rem; }
-	.stack-cards img { left: calc(var(--card-index, 0) * 1.5rem); }
+	.physical-card-stack.hand .stack-cards img { left: calc(.5rem + var(--card-index, 0) * 1.5rem); }
 	.turn-plaque { flex-wrap: wrap; justify-content: center; border-radius: .5rem; }
 	.turn-plaque small { width: 100%; text-align: center; }
 	.arena-heading { position: static; width: 100%; }

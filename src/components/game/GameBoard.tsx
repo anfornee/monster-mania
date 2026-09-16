@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CORE_CATALOG } from '../../game/definitions/core'
 import type { GameCatalog, PlayerCardInstance, PlayerId } from '../../game/definitions/types'
 import type { GameAction, GameState } from '../../game/engine/types'
+import { useGameAudio } from '../../game/audio/useGameAudio'
 import type { GamePresentationStep } from '../../game/presentation/presentationSequence'
 import {
 	canDefeatMonster,
@@ -72,6 +73,7 @@ export function GameBoard({
 	presentationStep = null,
 	onPresentationComplete,
 }: GameBoardProps) {
+	useGameAudio(state, localPlayerId)
 	const localPlayer = getPlayer(state, localPlayerId) ?? state.players[0]
 	const opponent = getOpponent(state, localPlayerId)
 	const currentPlayer = getCurrentPlayer(state)
@@ -83,6 +85,50 @@ export function GameBoard({
 	const statusMessage = state.events.at(-1)?.message ?? 'Game ready.'
 	const pendingForLocalPlayer = state.pendingDiscard?.playerId === localPlayerId
 	const [inspectedCard, setInspectedCard] = useState<InspectableCard | null>(null)
+	const [handScrollCues, setHandScrollCues] = useState({ left: false, right: false })
+	const handRef = useRef<HTMLDivElement>(null)
+	const handCardCount = localPlayer.hand.length
+
+	useEffect(() => {
+		const hand = handRef.current
+		if (!hand) return
+
+		const updateScrollCue = () => {
+			const remainingScroll = hand.scrollWidth - hand.clientWidth - hand.scrollLeft
+			const nextCues = {
+				left: hand.scrollLeft > 1,
+				right: remainingScroll > 1,
+			}
+			setHandScrollCues((current) => (
+				current.left === nextCues.left && current.right === nextCues.right ? current : nextCues
+			))
+		}
+		const frame = window.requestAnimationFrame(updateScrollCue)
+		const resizeObserver = typeof ResizeObserver === 'undefined'
+			? null
+			: new ResizeObserver(updateScrollCue)
+
+		hand.addEventListener('scroll', updateScrollCue, { passive: true })
+		window.addEventListener('resize', updateScrollCue)
+		resizeObserver?.observe(hand)
+
+		return () => {
+			window.cancelAnimationFrame(frame)
+			hand.removeEventListener('scroll', updateScrollCue)
+			window.removeEventListener('resize', updateScrollCue)
+			resizeObserver?.disconnect()
+		}
+	}, [handCardCount])
+
+	const scrollHand = (direction: -1 | 1) => {
+		const hand = handRef.current
+		if (!hand) return
+		const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+		hand.scrollBy({
+			left: direction * Math.max(hand.clientWidth * .7, 120),
+			behavior: reduceMotion ? 'auto' : 'smooth',
+		})
+	}
 
 	const activateCard = (card: PlayerCardInstance) => {
 		if (pendingForLocalPlayer && !actionsResolving) {
@@ -189,23 +235,45 @@ export function GameBoard({
 					</div>
 					<DefeatedDialog player={localPlayer} catalog={catalog} score={getPlayerScore(state, localPlayer.id, catalog)} />
 				</div>
-				<div className="player-hand">
-					{localPlayer.hand.map((card) => {
-						const definition = catalog.playerCards[card.definitionId]
-						const isAction = definition.category === 'action'
-						const selected = state.pendingDiscard?.selectedCardInstanceIds.includes(card.instanceId) ?? false
-						const playable = pendingForLocalPlayer || (isLocalTurn && state.turn.actionPhaseOpen && isAction)
-						return (
-							<PlayerCardRenderer
-								key={card.instanceId}
-								definition={definition}
-								onActivate={() => activateCard(card)}
-								disabled={false}
-								playable={playable}
-								selected={selected}
-							/>
-						)
-					})}
+				<div className="player-hand-scroll">
+					<div className="player-hand" ref={handRef}>
+						{localPlayer.hand.map((card) => {
+							const definition = catalog.playerCards[card.definitionId]
+							const isAction = definition.category === 'action'
+							const selected = state.pendingDiscard?.selectedCardInstanceIds.includes(card.instanceId) ?? false
+							const playable = pendingForLocalPlayer || (isLocalTurn && state.turn.actionPhaseOpen && isAction)
+							return (
+								<PlayerCardRenderer
+									key={card.instanceId}
+									definition={definition}
+									onActivate={() => activateCard(card)}
+									disabled={false}
+									playable={playable}
+									selected={selected}
+								/>
+							)
+						})}
+					</div>
+					{handScrollCues.left ? (
+						<button
+							type="button"
+							className="hand-scroll-cue hand-scroll-cue-left"
+							aria-label="Scroll hand to the left"
+							onClick={() => scrollHand(-1)}
+						>
+							<span aria-hidden="true">‹</span>
+						</button>
+					) : null}
+					{handScrollCues.right ? (
+						<button
+							type="button"
+							className="hand-scroll-cue hand-scroll-cue-right"
+							aria-label="Scroll hand to the right"
+							onClick={() => scrollHand(1)}
+						>
+							<span aria-hidden="true">›</span>
+						</button>
+					) : null}
 				</div>
 				<div className="turn-controls">
 					{pendingForLocalPlayer ? (
@@ -237,7 +305,7 @@ export function GameBoard({
 			<details className="game-log">
 				<summary>Hunter's journal <span>{state.events.length} entries</span></summary>
 				<ol>
-					{state.events.slice(-10).reverse().map((event) => <li key={event.id}>{event.message}</li>)}
+					{[...state.events].reverse().map((event) => <li key={event.id}>{event.message}</li>)}
 				</ol>
 			</details>
 

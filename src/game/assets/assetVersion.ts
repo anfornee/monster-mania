@@ -1,5 +1,5 @@
 /**
- * Bump this value whenever a public game-visible asset is replaced in place.
+ * Bump this value whenever public game-visible image or audio is replaced in place.
  * Stable public filenames then receive a new browser-cache URL without needing
  * path edits throughout the application.
  */

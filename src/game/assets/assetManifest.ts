@@ -1,14 +1,15 @@
 import { CORE_CATALOG } from '../definitions/core'
+import { AUDIO_TRACKS } from '../audio/audioManifest'
 import { versionAssetPath } from './assetVersion'
 
-export type GameAssetGroup = 'boot' | 'menu' | 'game'
+export type GameAssetGroup = 'boot' | 'menu' | 'game' | 'audio'
 
 export interface GameAsset {
 	id: string
 	src: string
 	group: GameAssetGroup
 	critical: boolean
-	kind: 'image'
+	kind: 'image' | 'audio'
 }
 
 export const GAME_ASSET_PATHS = {
@@ -42,6 +43,14 @@ const catalogAssets: GameAsset[] = [
 	},
 ]
 
+const audioAssets: GameAsset[] = AUDIO_TRACKS.map((track) => ({
+	id: `audio:${track.id}`,
+	src: track.src,
+	group: 'audio',
+	critical: track.preloadTier === 'critical',
+	kind: 'audio',
+}))
+
 export const GAME_ASSETS: GameAsset[] = [
 	{
 		id: 'logo',
@@ -72,10 +81,19 @@ export const GAME_ASSETS: GameAsset[] = [
 		kind: 'image',
 	},
 	...catalogAssets,
+	...audioAssets,
 ]
 
-export const MENU_CRITICAL_ASSETS = GAME_ASSETS.filter(
-	(asset) => asset.critical && (asset.group === 'boot' || asset.group === 'menu'),
-)
+export const MENU_CRITICAL_ASSETS = GAME_ASSETS.filter((asset) => asset.critical)
 
 export const GAMEPLAY_ASSETS = GAME_ASSETS.filter((asset) => asset.group === 'game')
+
+export const AUDIO_PRIORITY_ASSETS = GAME_ASSETS.filter((asset) => (
+	asset.kind === 'audio'
+	&& AUDIO_TRACKS.some((track) => track.src === asset.src && track.preloadTier === 'priority')
+))
+
+export const AUDIO_BACKGROUND_ASSETS = GAME_ASSETS.filter((asset) => (
+	asset.kind === 'audio'
+	&& AUDIO_TRACKS.some((track) => track.src === asset.src && track.preloadTier === 'background')
+))

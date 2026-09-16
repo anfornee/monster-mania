@@ -84,4 +84,23 @@ describe('table presentation privacy and actions', () => {
 		expect(markup).toContain(`Draw deck: ${state.drawPile.length} cards`)
 		expect(markup).toContain(`Monster deck: ${state.monsterDeck.length} cards`)
 	})
+
+	it('renders every retained journal entry with the newest first', () => {
+		const state = structuredClone(createSandboxScenario('fresh-game').state)
+		state.events = Array.from({ length: 12 }, (_, index) => ({
+			id: index + 1,
+			type: 'turn-started' as const,
+			message: `Journal entry ${index + 1}`,
+		}))
+		state.nextEventId = 13
+
+		const markup = renderToStaticMarkup(
+			<GameBoard state={state} localPlayerId="player-1" onAction={() => undefined} />,
+		)
+
+		expect(markup).toContain('12 entries')
+		expect(markup).toContain('Journal entry 1')
+		expect(markup).toContain('Journal entry 12')
+		expect(markup.indexOf('>Journal entry 12</li>')).toBeLessThan(markup.indexOf('>Journal entry 1</li>'))
+	})
 })

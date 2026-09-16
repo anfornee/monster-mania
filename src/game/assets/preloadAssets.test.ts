@@ -4,6 +4,7 @@ import { GAME_ASSETS, type GameAsset } from './assetManifest'
 import {
 	calculateAssetProgress,
 	deduplicateAssets,
+	preloadAudio,
 	preloadAssets,
 	preloadImage,
 } from './preloadAssets'
@@ -105,5 +106,30 @@ describe('asset loading', () => {
 		}
 		await preloadImage('/asset.png', { imageFactory: () => image, timeoutMs: 100 })
 		expect(decode).toHaveBeenCalledOnce()
+	})
+
+	it('fully reads short audio before marking it ready', async () => {
+		const arrayBuffer = vi.fn(async () => new ArrayBuffer(8))
+		await preloadAudio('/sound.mp3', {
+			fetcher: async () => ({ ok: true, status: 200, arrayBuffer }),
+		})
+		expect(arrayBuffer).toHaveBeenCalledOnce()
+	})
+
+	it('reports failed audio responses', async () => {
+		await expect(preloadAudio('/missing.mp3', {
+			fetcher: async () => ({
+				ok: false,
+				status: 404,
+				arrayBuffer: async () => new ArrayBuffer(0),
+			}),
+		})).rejects.toThrow('Failed to load audio (404)')
+	})
+
+	it('times out audio requests instead of holding the boot screen forever', async () => {
+		await expect(preloadAudio('/stalled.mp3', {
+			fetcher: () => new Promise<never>(() => undefined),
+			timeoutMs: 1,
+		})).rejects.toThrow('Timed out loading audio')
 	})
 })

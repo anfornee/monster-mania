@@ -10,7 +10,7 @@ The Solo Game is presented as two seats around a shared tavern table. This layer
 - The shared Draw deck sits to the left of the central Monster arena and the Monster deck sits to its right. Both use labeled numeric badges so their remaining counts stay legible independently of the background artwork.
 - Face-up Monsters occupy the central arena. Their requirement chips show both the required Weapon name and a check/dash state, so availability is not communicated by color alone.
 - The local seat is at the bottom with a large hand, integrated score/defeated pile, and turn control.
-- The latest event remains visible. Full recent history is available from the compact Hunter's journal.
+- The latest event remains visible. Every event retained in the current state is available newest-first from the compact, scrollable Hunter's journal.
 - `PlayerState` and neutral seat language remain controller-agnostic so a future Online Table can reuse the composition without pretending every opponent is a bot.
 
 The production table art is `public/assets/backgrounds/board-bg.png`. Its built-in dagger, candle, cup, journal, and wear are decorative and therefore are not exposed to assistive technology.

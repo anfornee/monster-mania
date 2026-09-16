@@ -30,13 +30,24 @@ export interface PreloadImageOptions {
 	timeoutMs?: number
 }
 
+interface PreloadableResponse {
+	ok: boolean
+	status: number
+	arrayBuffer: () => Promise<ArrayBuffer>
+}
+
+export interface PreloadAudioOptions {
+	fetcher?: (src: string, init?: { signal?: AbortSignal }) => Promise<PreloadableResponse>
+	timeoutMs?: number
+}
+
 export interface PreloadAssetsOptions {
 	concurrency?: number
 	onProgress?: (progress: AssetLoadProgress) => void
 	loadAsset?: (asset: GameAsset) => Promise<void>
 }
 
-const sharedImageRequests = new Map<string, Promise<void>>()
+const sharedAssetRequests = new Map<string, Promise<void>>()
 
 export function calculateAssetProgress(total: number, completed: number, failed: number): AssetLoadProgress {
 	return {
@@ -95,14 +106,52 @@ export function preloadImage(src: string, options: PreloadImageOptions = {}): Pr
 }
 
 export function preloadImageOnce(src: string): Promise<void> {
-	const existing = sharedImageRequests.get(src)
+	const existing = sharedAssetRequests.get(src)
 	if (existing) return existing
 	const request = preloadImage(src).catch((error) => {
-		sharedImageRequests.delete(src)
+		sharedAssetRequests.delete(src)
 		throw error
 	})
-	sharedImageRequests.set(src, request)
+	sharedAssetRequests.set(src, request)
 	return request
+}
+
+export async function preloadAudio(src: string, options: PreloadAudioOptions = {}): Promise<void> {
+	const fetcher = options.fetcher ?? ((url: string) => fetch(url))
+	const timeoutMs = options.timeoutMs ?? 30_000
+	const controller = typeof AbortController === 'undefined' ? null : new AbortController()
+	let timeout: ReturnType<typeof globalThis.setTimeout> | undefined
+	const request = async () => {
+		const response = await fetcher(src, { signal: controller?.signal })
+		if (!response.ok) throw new Error(`Failed to load audio (${response.status}): ${src}`)
+		await response.arrayBuffer()
+	}
+	const timedOut = new Promise<never>((_, reject) => {
+		timeout = globalThis.setTimeout(() => {
+			controller?.abort()
+			reject(new Error(`Timed out loading audio: ${src}`))
+		}, timeoutMs)
+	})
+	try {
+		await Promise.race([request(), timedOut])
+	} finally {
+		if (timeout !== undefined) globalThis.clearTimeout(timeout)
+	}
+}
+
+export function preloadAudioOnce(src: string): Promise<void> {
+	const existing = sharedAssetRequests.get(src)
+	if (existing) return existing
+	const request = preloadAudio(src).catch((error) => {
+		sharedAssetRequests.delete(src)
+		throw error
+	})
+	sharedAssetRequests.set(src, request)
+	return request
+}
+
+export function preloadAssetOnce(asset: GameAsset): Promise<void> {
+	return asset.kind === 'audio' ? preloadAudioOnce(asset.src) : preloadImageOnce(asset.src)
 }
 
 export async function preloadAssets(
@@ -111,7 +160,7 @@ export async function preloadAssets(
 ): Promise<AssetLoadResult> {
 	const uniqueAssets = deduplicateAssets(assets)
 	const concurrency = Math.max(1, Math.min(options.concurrency ?? 6, uniqueAssets.length || 1))
-	const loadAsset = options.loadAsset ?? ((asset: GameAsset) => preloadImageOnce(asset.src))
+	const loadAsset = options.loadAsset ?? preloadAssetOnce
 	let cursor = 0
 	let completed = 0
 	const failures: AssetLoadFailure[] = []
@@ -146,5 +195,5 @@ export async function preloadAssets(
 }
 
 export function resetSharedAssetRequestsForTests(): void {
-	sharedImageRequests.clear()
+	sharedAssetRequests.clear()
 }

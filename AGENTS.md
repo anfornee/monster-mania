@@ -10,6 +10,7 @@ Monster Mania is a two-participant card game being adapted to React and TypeScri
 4. `docs/03-testing-checklist.md` and `docs/05-rules-sandbox-and-state-validation.md` — required coverage and invariants.
 5. `docs/card-game-visual-design-guide.md` — presentation direction.
 6. `docs/06-tabletop-ux-and-presentation.md` and `docs/07-asset-loading-and-cache-strategy.md` — board UI, boot flow, and cache-version conventions.
+7. `docs/09-audio-system.md` — audio ownership, playback lifecycle, event mapping, and extension rules.
 
 If code and the rules source of truth disagree, do not silently choose one. Treat the discrepancy as a gameplay change: update the engine, tests, and rule documentation together.
 
@@ -22,6 +23,7 @@ If code and the rules source of truth disagree, do not silently choose one. Trea
 - `src/game/serialization/` — versioned local save/restore.
 - `src/game/presentation/` — presentation-only timing, profile, and event-derived helpers; never authoritative rules.
 - `src/game/assets/` — authoritative visible-asset manifest, cache version, preload scheduler, and boot hook.
+- `src/game/audio/` — centralized audio manifest, playback manager, preference, game-event mapping, and React bridge.
 - `src/game/network/` — Online Table protocol, private player views, codes, shared authoritative gameplay logic, and the Firebase anonymous-auth/Firestore/Callable Functions client adapter. `functions/` owns trusted transactional initialization and commands. See `docs/08-firebase-online-lobby.md`.
 - `src/game/sandbox/` — deterministic scenario builders; legal presets must pass state validation.
 - `src/components/` and `src/App.tsx` — React presentation and action dispatch only.
@@ -61,6 +63,7 @@ Run tests, lint, type checking, and a production build before handing off a mean
 - Keep AI pacing one action at a time through `GameAction`; centralize durations in `src/game/presentation/aiPacing.ts` and ensure effects clean up timers.
 - Reuse `CardInspector`, physical card stacks, seat patterns, and event announcements instead of creating card-type-specific modal or animation systems.
 - Add preloaded standalone art to `src/game/assets/assetManifest.ts`; catalog card art is derived automatically. Bump `GAME_ASSET_VERSION` when replacing a public image at the same path.
+- Route all music, ambience, and SFX through `AudioManager`; components must not create local audio players. Derive gameplay cues from authoritative events, and bump `GAME_ASSET_VERSION` when replacing audio at an existing path.
 
 ## Cards, expansions, and rules changes
 

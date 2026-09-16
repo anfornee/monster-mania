@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import './App.css'
 import { CardGallery } from './components/cards/CardGallery'
+import { AppUpdateNotice } from './components/AppUpdateNotice'
+import { SoundToggle } from './components/SoundToggle'
 import { GameBootScreen } from './components/game/GameBootScreen'
 import { GameBoard } from './components/game/GameBoard'
 import { OnlineLobby } from './components/game/OnlineLobby'
 import { RulesSandbox } from './dev/RulesSandbox'
 import { chooseComputerAction } from './game/ai/computerStrategy'
+import { AudioProvider } from './game/audio/AudioProvider'
+import { useAudio } from './game/audio/audioContext'
 import {
+	AUDIO_BACKGROUND_ASSETS,
+	AUDIO_PRIORITY_ASSETS,
 	GAME_ASSET_PATHS,
 	GAMEPLAY_ASSETS,
 	MENU_CRITICAL_ASSETS,
@@ -159,6 +165,7 @@ function NameSetup({ initialName, onBack, onStart }: {
 }
 
 function GameApplication() {
+	const { manager: audio } = useAudio()
 	const [screen, setScreen] = useState<AppScreen>(() => (
 		loadOnlineTableSession(window.localStorage) ? 'online' : 'home'
 	))
@@ -179,6 +186,10 @@ function GameApplication() {
 	const decisionPlayer = game?.players.find((player) => player.id === decisionPlayerId)
 	const presentationStep = pendingPresentation?.steps[pendingPresentation.stepIndex] ?? null
 	const actionsResolving = handoffLocked || Boolean(pendingPresentation) || decisionPlayer?.controller === 'computer'
+
+	useEffect(() => {
+		if (screen !== 'solo') audio.playMenuMusic()
+	}, [audio, screen])
 
 	const commitGameState = useCallback((nextState: GameState, handoffToHuman = false) => {
 		if (handoffToHuman && nextState.phase !== 'game-over') setHandoffLocked(true)
@@ -368,6 +379,14 @@ const APP_ASSET_STYLES = {
 
 const BOOT_MINIMUM_MS = 360
 const BOOT_FADE_MS = 320
+const BACKGROUND_AUDIO_WARM_DELAY_MS = 15_000
+
+function shouldWarmBackgroundAudio(): boolean {
+	const connection = (navigator as Navigator & {
+		connection?: { saveData?: boolean; effectiveType?: string }
+	}).connection
+	return !connection?.saveData && connection?.effectiveType !== 'slow-2g' && connection?.effectiveType !== '2g'
+}
 
 function App() {
 	const { status, progress, retry } = useAssetPreloader(MENU_CRITICAL_ASSETS)
@@ -394,22 +413,38 @@ function App() {
 	useEffect(() => {
 		if (!contentVisible) return
 		let active = true
+		let backgroundAudioTimer: number | null = null
 		const idleWindow = window as Window & {
 			requestIdleCallback?: (callback: () => void) => number
 			cancelIdleCallback?: (handle: number) => void
 		}
-		const warmGameplayAssets = () => {
+		const warmInitialAssets = () => {
 			void preloadAssets(GAMEPLAY_ASSETS).then((result) => {
 				if (active && result.failures.length > 0) {
 					console.warn('Some gameplay art could not be preloaded.', result.failures)
 				}
 			})
+			void preloadAssets(AUDIO_PRIORITY_ASSETS, { concurrency: 1 }).then((result) => {
+				if (active && result.failures.length > 0) {
+					console.warn('Priority music could not be warmed.', result.failures)
+				}
+			})
+			if (shouldWarmBackgroundAudio()) {
+				backgroundAudioTimer = window.setTimeout(() => {
+					void preloadAssets(AUDIO_BACKGROUND_ASSETS, { concurrency: 1 }).then((result) => {
+						if (active && result.failures.length > 0) {
+							console.warn('Optional music could not be warmed.', result.failures)
+						}
+					})
+				}, BACKGROUND_AUDIO_WARM_DELAY_MS)
+			}
 		}
 		const idleHandle = idleWindow.requestIdleCallback
-			? idleWindow.requestIdleCallback(warmGameplayAssets)
-			: window.setTimeout(warmGameplayAssets, 0)
+			? idleWindow.requestIdleCallback(warmInitialAssets)
+			: window.setTimeout(warmInitialAssets, 0)
 		return () => {
 			active = false
+			if (backgroundAudioTimer !== null) window.clearTimeout(backgroundAudioTimer)
 			if (idleWindow.cancelIdleCallback) idleWindow.cancelIdleCallback(idleHandle)
 			else window.clearTimeout(idleHandle)
 		}
@@ -417,7 +452,13 @@ function App() {
 
 	return (
 		<div className={`app-runtime${contentVisible ? ' content-visible' : ''}`} style={APP_ASSET_STYLES}>
-			{contentVisible ? <GameApplication /> : null}
+			{contentVisible ? (
+				<AudioProvider>
+					<GameApplication />
+					<AppUpdateNotice />
+					<SoundToggle />
+				</AudioProvider>
+			) : null}
 			{bootPhase !== 'done' ? (
 				<GameBootScreen
 					status={status}

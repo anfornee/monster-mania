@@ -64,12 +64,12 @@ const monster = (
 
 export const CORE_REGULAR_MONSTERS = [
 	monster('socket', 'Socket', 1, ['gun', 'spear']),
-	monster('top', 'Top', 1, ['grenade', 'sword']),
+	monster('top', 'Top', 1, ['sword', 'grenade']),
 	monster('bitty-bitey', 'Bitty Bitey', 1, ['mace', 'spear']),
 	monster('flower-trap', 'Flower Trap', 1, ['mace', 'bow']),
-	monster('smasher', 'Smasher', 1, ['bow', 'mace']),
-	monster('wrecking-snake', 'Wrecking Snake', 1, ['spear', 'sword']),
-	monster('boom-boom', 'Boom Boom', 1, ['spear', 'gun']),
+	monster('smasher', 'Smasher', 1, ['mace', 'bow']),
+	monster('wrecking-snake', 'Wrecking Snake', 1, ['sword', 'spear']),
+	monster('boom-boom', 'Boom Boom', 1, ['gun', 'spear']),
 	monster('rocket-chomper', 'Rocket Chomper', 1, ['grenade', 'spear']),
 	monster('wacker', 'Wacker', 1, ['mace', 'sword']),
 	monster('chomper', 'Chomper', 1, ['grenade', 'spear']),
@@ -77,8 +77,8 @@ export const CORE_REGULAR_MONSTERS = [
 	monster('pincher', 'Pincher', 2, ['grenade', 'spear', 'sword']),
 	monster('rock-crab', 'Rock Crab', 2, ['grenade', 'gun', 'bow']),
 	monster('ground-worm', 'Ground Worm', 2, ['grenade', 'gun', 'mace']),
-	monster('spikey', 'Spikey', 2, ['bow', 'sword', 'spear']),
-	monster('kraken', 'Kraken', 2, ['gun', 'grenade', 'spear']),
+	monster('spikey', 'Spikey', 2, ['sword', 'bow', 'spear']),
+	monster('kraken', 'Kraken', 2, ['grenade', 'gun', 'spear']),
 	monster('thing', 'Thing', 3, ['gun', 'spear', 'grenade', 'bow']),
 ] satisfies MonsterDefinition[]
 

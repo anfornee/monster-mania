@@ -18,7 +18,23 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/__\//],
         runtimeCaching: [
           {
-            urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith('/assets/'),
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith('/assets/audio/'),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'monster-mania-audio',
+              cacheableResponse: { statuses: [0, 200] },
+              rangeRequests: true,
+              expiration: {
+                maxEntries: 24,
+                maxAgeSeconds: 60 * 60 * 24 * 90,
+                purgeOnQuotaError: true,
+              },
+            },
+          },
+          {
+            urlPattern: ({ url, sameOrigin }) => sameOrigin
+              && url.pathname.startsWith('/assets/')
+              && !url.pathname.startsWith('/assets/audio/'),
             handler: 'CacheFirst',
             options: {
               cacheName: 'monster-mania-game-assets',
@@ -26,6 +42,7 @@ export default defineConfig({
               expiration: {
                 maxEntries: 64,
                 maxAgeSeconds: 60 * 60 * 24 * 365,
+                purgeOnQuotaError: true,
               },
             },
           },
