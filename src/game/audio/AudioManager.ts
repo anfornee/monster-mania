@@ -5,6 +5,7 @@ import {
 	AUDIO_MUTE_FADE_MS,
 	AUDIO_TRANSITION_MS,
 	CARD_SOUND_IDS,
+	TAVERN_MUSIC_IDS,
 	getTrackVolume,
 	type AudioScene,
 	type AudioTrackDefinition,
@@ -35,6 +36,7 @@ interface LongFormVoice {
 }
 
 interface ActiveLongForm {
+	layer: 'scene' | 'tavern-music'
 	scene: AudioScene
 	track: AudioTrackDefinition
 	generation: number
@@ -61,7 +63,9 @@ export class AudioManager {
 	private desiredScene: AudioScene = 'menu'
 	private completedScene: AudioScene | null = null
 	private active: ActiveLongForm | null = null
+	private activeTavernMusic: ActiveLongForm | null = null
 	private generation = 0
+	private tavernMusicIndex = 0
 	private lastCardSound: CardSoundId | null = null
 
 	constructor(backend: AudioPlaybackBackend, options: AudioManagerOptions = {}) {
@@ -176,6 +180,7 @@ export class AudioManager {
 		if (this.active?.loopTimer) this.scheduler.clearTimeout(this.active.loopTimer)
 		for (const sound of this.longFormSounds.values()) sound.stop()
 		this.active = null
+		this.activeTavernMusic = null
 		this.completedScene = null
 		this.unlocked = false
 	}
@@ -215,6 +220,7 @@ export class AudioManager {
 		const generation = this.generation
 		const voice = this.playLongFormVoice(track, 0)
 		const active: ActiveLongForm = {
+			layer: 'scene',
 			scene,
 			track,
 			generation,
@@ -227,6 +233,33 @@ export class AudioManager {
 		if (track.loopMode === 'crossfade') {
 			this.getLongFormSound(track.id as LongFormTrackId, 1).load()
 		}
+		this.fadeInVoiceWhenPlaying(active, voice, AUDIO_TRANSITION_MS, () => {
+			this.armLongFormVoice(active, voice)
+		})
+		if (scene === 'ambience') this.startNextTavernMusic(generation)
+	}
+
+	private startNextTavernMusic(generation: number): void {
+		if (
+			this.generation !== generation
+			|| this.desiredScene !== 'ambience'
+			|| !this.canPlay()
+		) return
+		const trackId = TAVERN_MUSIC_IDS[this.tavernMusicIndex]
+		this.tavernMusicIndex = (this.tavernMusicIndex + 1) % TAVERN_MUSIC_IDS.length
+		const track = AUDIO_MANIFEST[trackId]
+		const voice = this.playLongFormVoice(track, 0)
+		const active: ActiveLongForm = {
+			layer: 'tavern-music',
+			scene: 'ambience',
+			track,
+			generation,
+			current: voice,
+			pending: null,
+			voices: new Set([voice]),
+			loopTimer: null,
+		}
+		this.activeTavernMusic = active
 		this.fadeInVoiceWhenPlaying(active, voice, AUDIO_TRANSITION_MS, () => {
 			this.armLongFormVoice(active, voice)
 		})
@@ -251,7 +284,7 @@ export class AudioManager {
 	): void {
 		let handled = false
 		const start = () => {
-			if (handled || this.active?.generation !== active.generation) return
+			if (handled || !this.isActive(active)) return
 			handled = true
 			const targetVolume = getTrackVolume(active.track)
 			if (fadeMs > 0) voice.sound.fade(0, targetVolume, fadeMs, voice.id)
@@ -265,7 +298,7 @@ export class AudioManager {
 	private armLongFormVoice(active: ActiveLongForm, voice: LongFormVoice): void {
 		if (active.track.loopMode === 'crossfade') {
 			const schedule = () => {
-				if (this.active?.generation !== active.generation || active.current !== voice) return
+				if (!this.isActive(active) || active.current !== voice) return
 				const measuredDuration = voice.sound.duration(voice.id) * 1_000
 				const duration = Number.isFinite(measuredDuration) && measuredDuration > 0
 					? Math.min(measuredDuration, active.track.approximateDurationMs)
@@ -279,7 +312,7 @@ export class AudioManager {
 			if (voice.sound.playing(voice.id)) schedule()
 			else voice.sound.once('play', schedule, voice.id)
 			voice.sound.once('end', () => {
-				if (this.active?.generation === active.generation && active.current === voice) {
+				if (this.isActive(active) && active.current === voice) {
 					if (active.pending) {
 						active.pending.sound.stop(active.pending.id)
 						active.voices.delete(active.pending)
@@ -293,7 +326,12 @@ export class AudioManager {
 
 		if (active.track.loopMode === 'none') {
 			voice.sound.once('end', () => {
-				if (this.active?.generation !== active.generation) return
+				if (!this.isActive(active)) return
+				if (active.layer === 'tavern-music') {
+					this.activeTavernMusic = null
+					this.startNextTavernMusic(active.generation)
+					return
+				}
 				this.completedScene = active.scene
 				this.active = null
 			}, voice.id)
@@ -302,7 +340,7 @@ export class AudioManager {
 
 	private crossfadeLoop(active: ActiveLongForm, previous: LongFormVoice, fadeOverride?: number): void {
 		if (
-			this.active?.generation !== active.generation
+			!this.isActive(active)
 			|| active.current !== previous
 			|| active.pending
 		) return
@@ -326,14 +364,26 @@ export class AudioManager {
 	}
 
 	private stopActiveLongForm(fadeMs: number): void {
-		const active = this.active
-		if (!active) return
-		if (active.loopTimer) this.scheduler.clearTimeout(active.loopTimer)
+		const activeTracks = [this.active, this.activeTavernMusic].filter(
+			(active): active is ActiveLongForm => active !== null,
+		)
 		this.active = null
+		this.activeTavernMusic = null
+		for (const active of activeTracks) this.stopLongForm(active, fadeMs)
+	}
+
+	private stopLongForm(active: ActiveLongForm, fadeMs: number): void {
+		if (active.loopTimer) this.scheduler.clearTimeout(active.loopTimer)
 		for (const voice of active.voices) {
 			voice.sound.fade(voice.sound.getVolume(voice.id), 0, fadeMs, voice.id)
 			this.scheduler.setTimeout(() => voice.sound.stop(voice.id), fadeMs)
 		}
+	}
+
+	private isActive(active: ActiveLongForm): boolean {
+		return active.layer === 'scene'
+			? this.active === active
+			: this.activeTavernMusic === active
 	}
 
 	private playSfx(trackId: SfxTrackId): void {

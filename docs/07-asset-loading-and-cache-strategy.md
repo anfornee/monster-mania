@@ -12,8 +12,8 @@ After the menu is visible, gameplay artwork and priority audio begin warming dur
 boot screen
     -> logo + menu background decode; short SFX fetch
     -> menu fades in
-    -> board, card art, menu music, and match ambience warm
-    -> optional Sudden Death and result music warm later
+    -> board, card art, menu music, match ambience, and the first match song warm
+    -> the remaining match playlist, Sudden Death, and result music warm later
 ```
 
 Long-form audio is never part of the blocking boot percentage.
@@ -29,8 +29,8 @@ Long-form audio is never part of the blocking boot percentage.
 Audio definitions live in `src/game/audio/audioManifest.ts` and are projected into the asset manifest as:
 
 - `critical`: six short SFX fetched before the menu appears.
-- `priority`: menu music and normal-match ambience warmed after reveal.
-- `background`: Sudden Death and result music warmed later when the connection permits.
+- `priority`: menu music, normal-match ambience, and the first match song warmed after reveal.
+- `background`: the remaining match playlist, Sudden Death, and result music warmed later when the connection permits.
 
 Card entries are derived from `CORE_CATALOG`; do not manually duplicate the card list. Adding a catalog card with an `assetPath` automatically places it in the gameplay tier. Add a standalone decorative image once to `GAME_ASSETS` and reference its exported path from components. Add audio only through `AUDIO_MANIFEST`.
 

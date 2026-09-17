@@ -22,7 +22,8 @@ AudioProvider (preference, initial playback attempt, gesture fallback, visibilit
 | Scene or cue | File | Behavior |
 | --- | --- | --- |
 | Tavern menu | `welcome-hunter.mp3` | Native seamless loop |
-| Normal match | `tavern-ambience.mp3` | Two-voice loop with a 12-second crossfade |
+| Normal match ambience | `tavern-ambience.mp3` | Two-voice loop with a 12-second crossfade |
+| Normal match music | `tavern-music-1.mp3` through `tavern-music-4.mp3` | Sequential playlist layered over the ambience |
 | Sudden Death | `battle-for-eternity.mp3` | Two-voice loop with a 5-second crossfade |
 | Local victory | `dubs-in-the-chat.mp3` | Plays once |
 | Local loss | `take-the-l.mp3` | Plays once |
@@ -30,9 +31,9 @@ AudioProvider (preference, initial playback attempt, gesture fallback, visibilit
 | Card interaction | `card-1.mp3` through `card-4.mp3` | Random variant without an immediate repeat |
 | Initial or recycled deck shuffle | `shuffle-cards.mp3` | One cue per authoritative shuffle event batch |
 
-Scene changes fade between long-form tracks over 1.2 seconds. Disabling sound immediately stops SFX and fades long-form audio over 0.32 seconds; enabling it resumes the scene that the application currently wants.
+Scene changes fade between long-form tracks over 1.2 seconds. Normal gameplay runs the tavern music playlist and tavern ambience together; entering Sudden Death or a game result fades out both before the dedicated music takes over. Disabling sound immediately stops SFX and fades long-form audio over 0.32 seconds; enabling it resumes the scene that the application currently wants.
 
-For crossfade loops, the alternate player is loaded when the scene starts. The manager uses the earlier of the browser-reported duration and the manifest duration, starts the alternate player before the overlap, and waits for its `play` event before fading the current player. The current tavern ambience is approximately 21 seconds long; the menu track is approximately 2 minutes 32 seconds.
+For crossfade loops, the alternate player is loaded when the scene starts. The manager uses the earlier of the browser-reported duration and the manifest duration, starts the alternate player before the overlap, and waits for its `play` event before fading the current player. The current tavern ambience is approximately 21 seconds long; the menu track is approximately 2 minutes 32 seconds. The first tavern music track is priority-warmed and the remaining playlist tracks warm in the background.
 
 ## Authoritative event mapping
 

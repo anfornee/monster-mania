@@ -5,9 +5,10 @@ import {
 	AUDIO_MANIFEST,
 	AUDIO_MUTE_FADE_MS,
 	AUDIO_TRANSITION_MS,
+	TAVERN_MUSIC_IDS,
 	type AudioTrackDefinition,
 } from './audioManifest'
-import type { AudioPlaybackBackend, AudioSound } from './audioPlayback'
+import type { AudioPlaybackBackend, AudioPlaybackEvent, AudioSound } from './audioPlayback'
 import { getGameAudioScene } from './gameAudio'
 
 class FakeSound implements AudioSound {
@@ -16,6 +17,7 @@ class FakeSound implements AudioSound {
 	stopCount = 0
 	private nextId = 1
 	private readonly active = new Set<number>()
+	private readonly endListeners = new Map<number, Array<(id: number) => void>>()
 
 	play(): number {
 		const id = this.nextId
@@ -38,8 +40,22 @@ class FakeSound implements AudioSound {
 		return id === undefined ? this.active.size > 0 : this.active.has(id)
 	}
 	duration(): number { return 100 }
-	once(): void {}
+	once(event: AudioPlaybackEvent, callback: (id: number) => void, id?: number): void {
+		if (event !== 'end' || id === undefined) return
+		const listeners = this.endListeners.get(id) ?? []
+		listeners.push(callback)
+		this.endListeners.set(id, listeners)
+	}
 	load(): void { this.loadCount += 1 }
+
+	finishFirst(): void {
+		const id = this.active.values().next().value as number | undefined
+		if (id === undefined) throw new Error('No active sound to finish.')
+		this.active.delete(id)
+		const listeners = this.endListeners.get(id) ?? []
+		this.endListeners.delete(id)
+		for (const listener of listeners) listener(id)
+	}
 }
 
 class FakeBackend implements AudioPlaybackBackend {
@@ -99,6 +115,12 @@ class RecordingScheduler implements AudioScheduler {
 		const [task] = this.tasks.splice(index, 1)
 		task.callback()
 	}
+
+	runAll(delayMs: number): void {
+		const tasks = this.tasks.filter((task) => task.delayMs === delayMs)
+		this.tasks.splice(0, this.tasks.length, ...this.tasks.filter((task) => task.delayMs !== delayMs))
+		for (const task of tasks) task.callback()
+	}
 }
 
 function managerWith(backend: FakeBackend, enabled = true, random = () => 0): AudioManager {
@@ -137,9 +159,38 @@ describe('AudioManager', () => {
 		manager.playMenuMusic()
 		expect(backend.playCount('menu')).toBe(2)
 		expect(backend.playCount('ambience')).toBe(1)
+		expect(backend.playCount('tavern-music-1')).toBe(1)
 		expect(backend.playCount('sudden-death')).toBe(1)
 		expect(backend.playCount('victory')).toBe(1)
 		expect(backend.playCount('loss')).toBe(1)
+	})
+
+	it('plays all tavern music as a playlist and stops it for priority music', () => {
+		const backend = new FakeBackend()
+		const scheduler = new RecordingScheduler()
+		const manager = new AudioManager(backend, { scheduler })
+		manager.unlock()
+		manager.startGameAmbience()
+
+		for (let index = 0; index < TAVERN_MUSIC_IDS.length; index += 1) {
+			const trackId = TAVERN_MUSIC_IDS[index]
+			expect(backend.playCount(trackId)).toBe(1)
+			if (index < TAVERN_MUSIC_IDS.length - 1) {
+				backend.sounds.get(trackId)?.[0].finishFirst()
+			}
+		}
+
+		manager.startSuddenDeathMusic()
+		scheduler.runAll(AUDIO_TRANSITION_MS)
+		expect(backend.playCount('sudden-death')).toBe(1)
+		expect(backend.sounds.get('tavern-music-4')?.[0].playing()).toBe(false)
+
+		manager.startGameAmbience()
+		expect(backend.playCount('tavern-music-1')).toBe(2)
+		manager.playVictoryMusic()
+		scheduler.runAll(AUDIO_TRANSITION_MS)
+		expect(backend.playCount('victory')).toBe(1)
+		expect(backend.sounds.get('tavern-music-1')?.[0].playing()).toBe(false)
 	})
 
 	it('primes and alternates two ambience players before the measured track ends', () => {
@@ -164,11 +215,16 @@ describe('AudioManager', () => {
 		expect(AUDIO_MUTE_FADE_MS).toBe(320)
 		expect(AUDIO_MANIFEST.menu.approximateDurationMs).toBe(152_000)
 		expect(AUDIO_MANIFEST.menu.loopMode).toBe('native')
-		expect(AUDIO_MANIFEST.ambience.volume).toBe(.9)
+		expect(AUDIO_MANIFEST.ambience.volume).toBe(.85)
 		expect(AUDIO_MANIFEST.ambience.approximateDurationMs).toBe(21_000)
 		expect(AUDIO_MANIFEST.ambience.crossfadeMs).toBe(12_000)
+		for (const trackId of TAVERN_MUSIC_IDS) {
+			expect(AUDIO_MANIFEST[trackId].volume).toBe(.70)
+		}
 		expect(AUDIO_MANIFEST['sudden-death'].volume).toBe(.84)
 		expect(AUDIO_MANIFEST['sudden-death'].crossfadeMs).toBe(5_000)
+		expect(AUDIO_MANIFEST.victory.volume).toBe(.85)
+		expect(AUDIO_MANIFEST.loss.volume).toBe(.85)
 		expect(AUDIO_MANIFEST['monster-defeated'].volume).toBe(.85)
 	})
 

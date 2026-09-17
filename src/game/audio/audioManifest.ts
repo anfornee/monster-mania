@@ -4,11 +4,12 @@ export type AudioBus = 'music' | 'ambience' | 'sfx'
 export type AudioPreloadTier = 'critical' | 'priority' | 'background'
 export type AudioLoopMode = 'none' | 'native' | 'crossfade'
 
-export type LongFormTrackId = 'menu' | 'ambience' | 'sudden-death' | 'victory' | 'loss'
+export type TavernMusicTrackId = 'tavern-music-1' | 'tavern-music-2' | 'tavern-music-3' | 'tavern-music-4'
+export type LongFormTrackId = 'menu' | 'ambience' | TavernMusicTrackId | 'sudden-death' | 'victory' | 'loss'
 export type CardSoundId = 'card-1' | 'card-2' | 'card-3' | 'card-4'
 export type SfxTrackId = 'monster-defeated' | CardSoundId | 'shuffle'
 export type AudioTrackId = LongFormTrackId | SfxTrackId
-export type AudioScene = LongFormTrackId
+export type AudioScene = 'menu' | 'ambience' | 'sudden-death' | 'victory' | 'loss'
 
 export interface AudioTrackDefinition {
 	id: AudioTrackId
@@ -47,11 +48,47 @@ export const AUDIO_MANIFEST = {
 		id: 'ambience',
 		src: audioPath('tavern-ambience.mp3'),
 		bus: 'ambience',
-		volume: .9,
+		volume: .85,
 		preloadTier: 'priority',
 		loopMode: 'crossfade',
 		approximateDurationMs: 21_000,
 		crossfadeMs: 12_000,
+	},
+	'tavern-music-1': {
+		id: 'tavern-music-1',
+		src: audioPath('tavern-music-1.mp3'),
+		bus: 'music',
+		volume: .70,
+		preloadTier: 'priority',
+		loopMode: 'none',
+		approximateDurationMs: 197_000,
+	},
+	'tavern-music-2': {
+		id: 'tavern-music-2',
+		src: audioPath('tavern-music-2.mp3'),
+		bus: 'music',
+		volume: .70,
+		preloadTier: 'background',
+		loopMode: 'none',
+		approximateDurationMs: 336_000,
+	},
+	'tavern-music-3': {
+		id: 'tavern-music-3',
+		src: audioPath('tavern-music-3.mp3'),
+		bus: 'music',
+		volume: .70,
+		preloadTier: 'background',
+		loopMode: 'none',
+		approximateDurationMs: 269_000,
+	},
+	'tavern-music-4': {
+		id: 'tavern-music-4',
+		src: audioPath('tavern-music-4.mp3'),
+		bus: 'music',
+		volume: .70,
+		preloadTier: 'background',
+		loopMode: 'none',
+		approximateDurationMs: 173_000,
 	},
 	'sudden-death': {
 		id: 'sudden-death',
@@ -67,7 +104,7 @@ export const AUDIO_MANIFEST = {
 		id: 'victory',
 		src: audioPath('dubs-in-the-chat.mp3'),
 		bus: 'music',
-		volume: 1,
+		volume: .85,
 		preloadTier: 'background',
 		loopMode: 'none',
 		approximateDurationMs: 148_000,
@@ -76,7 +113,7 @@ export const AUDIO_MANIFEST = {
 		id: 'loss',
 		src: audioPath('take-the-l.mp3'),
 		bus: 'music',
-		volume: .92,
+		volume: .85,
 		preloadTier: 'background',
 		loopMode: 'none',
 		approximateDurationMs: 158_000,
@@ -139,6 +176,12 @@ export const AUDIO_MANIFEST = {
 
 export const AUDIO_TRACKS = Object.values(AUDIO_MANIFEST)
 export const CARD_SOUND_IDS: CardSoundId[] = ['card-1', 'card-2', 'card-3', 'card-4']
+export const TAVERN_MUSIC_IDS: TavernMusicTrackId[] = [
+	'tavern-music-1',
+	'tavern-music-2',
+	'tavern-music-3',
+	'tavern-music-4',
+]
 
 export function getTrackVolume(track: AudioTrackDefinition): number {
 	return AUDIO_MASTER_VOLUME * AUDIO_BUS_VOLUMES[track.bus] * track.volume
