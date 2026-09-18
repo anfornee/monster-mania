@@ -5,8 +5,12 @@ import {
 	AUDIO_MUTE_FADE_MS,
 	AUDIO_TRANSITION_MS,
 	CARD_SOUND_IDS,
+	DEFAULT_AUDIO_BUS_VOLUMES,
 	TAVERN_MUSIC_IDS,
+	clampAudioBusVolume,
 	getTrackVolume,
+	type AudioBus,
+	type AudioBusVolumes,
 	type AudioScene,
 	type AudioTrackDefinition,
 	type CardSoundId,
@@ -35,6 +39,11 @@ interface LongFormVoice {
 	slot: 0 | 1
 }
 
+interface PrimedSceneVoice {
+	scene: AudioScene
+	voice: LongFormVoice
+}
+
 interface ActiveLongForm {
 	layer: 'scene' | 'tavern-music'
 	scene: AudioScene
@@ -58,12 +67,17 @@ export class AudioManager {
 	private readonly sfxSounds = new Map<SfxTrackId, AudioSound>()
 	private readonly longFormSounds = new Map<string, AudioSound>()
 	private readonly eventCursor = new GameEventAudioCursor()
+	private readonly busVolumes: AudioBusVolumes = { ...DEFAULT_AUDIO_BUS_VOLUMES }
 	private enabled: boolean
 	private unlocked = false
+	private visible = true
 	private desiredScene: AudioScene = 'menu'
 	private completedScene: AudioScene | null = null
 	private active: ActiveLongForm | null = null
 	private activeTavernMusic: ActiveLongForm | null = null
+	private outgoing: ActiveLongForm[] = []
+	private transitionTimer: TimerHandle | null = null
+	private primedSceneVoice: PrimedSceneVoice | null = null
 	private generation = 0
 	private tavernMusicIndex = 0
 	private lastCardSound: CardSoundId | null = null
@@ -79,6 +93,21 @@ export class AudioManager {
 		return this.enabled
 	}
 
+	getBusVolume(bus: AudioBus): number {
+		return this.busVolumes[bus]
+	}
+
+	setBusVolume(bus: AudioBus, volume: number): void {
+		this.busVolumes[bus] = clampAudioBusVolume(volume)
+		for (const [trackId, sound] of this.sfxSounds) {
+			sound.volume(this.trackVolume(AUDIO_MANIFEST[trackId]))
+		}
+		for (const active of [this.active, this.activeTavernMusic]) {
+			if (!active || active.track.bus !== bus) continue
+			active.current.sound.volume(this.trackVolume(active.track), active.current.id)
+		}
+	}
+
 	prepareCriticalSfx(): void {
 		if (!this.enabled) return
 		for (const track of Object.values(AUDIO_MANIFEST)) {
@@ -88,9 +117,9 @@ export class AudioManager {
 
 	unlock(): void {
 		if (!this.enabled) return
+		if (!this.unlocked) this.unlocked = true
+		if (!this.visible) return
 		this.backend.resume()
-		if (this.unlocked) return
-		this.unlocked = true
 		this.startDesiredScene()
 	}
 
@@ -99,7 +128,7 @@ export class AudioManager {
 		this.enabled = enabled
 		if (!enabled) {
 			this.stopAllSfx()
-			this.stopActiveLongForm(AUDIO_MUTE_FADE_MS)
+			this.stopAllLongForm(AUDIO_MUTE_FADE_MS)
 			return
 		}
 		this.prepareCriticalSfx()
@@ -109,14 +138,32 @@ export class AudioManager {
 	private setScene(scene: AudioScene): void {
 		const changed = this.desiredScene !== scene
 		this.desiredScene = scene
+		if (this.primedSceneVoice?.scene !== scene) this.stopPrimedSceneVoice()
 		if (changed) this.completedScene = null
 		if (!this.enabled || !this.unlocked) return
-		if (this.active?.scene === scene || this.completedScene === scene) return
-		this.transitionTo(scene)
+		if (!this.visible || this.active?.scene === scene || this.completedScene === scene) return
+		this.beginSceneTransition()
 	}
 
 	playMenuMusic(): void {
 		this.setScene('menu')
+	}
+
+	prepareMenuMusicForUserGesture(): void {
+		this.setScene('menu')
+		if (!this.canPlay()) return
+		if (this.active?.scene === 'menu') {
+			if (!this.active.current.sound.playing(this.active.current.id)) {
+				this.active.current.sound.play(this.active.current.id)
+			}
+			return
+		}
+		if (this.primedSceneVoice?.scene === 'menu') return
+		this.stopPrimedSceneVoice()
+		this.primedSceneVoice = {
+			scene: 'menu',
+			voice: this.playLongFormVoice(AUDIO_MANIFEST.menu, 0),
+		}
 	}
 
 	startGameAmbience(): void {
@@ -135,8 +182,8 @@ export class AudioManager {
 		this.setScene('loss')
 	}
 
-	syncGameState(state: GameState, localPlayerId: PlayerId): void {
-		this.playScene(getGameAudioScene(state, localPlayerId))
+	syncGameState(state: GameState, localPlayerId: PlayerId, resultPresented = true): void {
+		this.playScene(getGameAudioScene(state, localPlayerId, resultPresented))
 		const events = this.eventCursor.takeNewEvents(state.events)
 		for (const cue of getGameAudioCues(events, state)) {
 			switch (cue) {
@@ -171,13 +218,49 @@ export class AudioManager {
 	}
 
 	handleVisibilityChange(visible: boolean): void {
-		if (visible && this.enabled && this.unlocked) this.backend.resume()
+		if (this.visible === visible) return
+		this.visible = visible
+		if (!visible) {
+			this.stopAllSfx()
+			this.cancelPendingTransition()
+			// This also silences any detached voice finishing a mute fade.
+			for (const sound of this.longFormSounds.values()) sound.pause()
+			for (const active of [this.active, this.activeTavernMusic]) {
+				if (!active) continue
+				if (active.loopTimer) {
+					this.scheduler.clearTimeout(active.loopTimer)
+					active.loopTimer = null
+				}
+			}
+			return
+		}
+		if (!this.enabled || !this.unlocked) return
+		this.backend.resume()
+		if (this.active?.scene !== this.desiredScene) {
+			this.stopActiveLongForm(0)
+			this.startDesiredScene()
+			return
+		}
+		for (const active of [this.active, this.activeTavernMusic]) {
+			if (!active) continue
+			for (const voice of active.voices) voice.sound.play(voice.id)
+			active.current.sound.fade(
+				active.current.sound.getVolume(active.current.id),
+				this.trackVolume(active.track),
+				AUDIO_MUTE_FADE_MS,
+				active.current.id,
+			)
+			if (active.track.loopMode === 'crossfade') this.scheduleCrossfade(active, active.current)
+		}
 	}
 
 	dispose(): void {
 		this.stopAllSfx()
 		this.generation += 1
+		this.cancelPendingTransition()
+		this.stopPrimedSceneVoice()
 		if (this.active?.loopTimer) this.scheduler.clearTimeout(this.active.loopTimer)
+		if (this.activeTavernMusic?.loopTimer) this.scheduler.clearTimeout(this.activeTavernMusic.loopTimer)
 		for (const sound of this.longFormSounds.values()) sound.stop()
 		this.active = null
 		this.activeTavernMusic = null
@@ -186,7 +269,7 @@ export class AudioManager {
 	}
 
 	private canPlay(): boolean {
-		return this.enabled && this.unlocked
+		return this.enabled && this.unlocked && this.visible
 	}
 
 	private playScene(scene: AudioScene): void {
@@ -209,16 +292,41 @@ export class AudioManager {
 	}
 
 	private startDesiredScene(): void {
+		if (!this.canPlay() || this.transitionTimer) return
 		if (this.active?.scene === this.desiredScene || this.completedScene === this.desiredScene) return
-		this.transitionTo(this.desiredScene)
+		this.startScene(this.desiredScene)
 	}
 
-	private transitionTo(scene: AudioScene): void {
-		this.stopActiveLongForm(AUDIO_TRANSITION_MS)
+	private beginSceneTransition(): void {
+		if (this.transitionTimer) return
+		const activeTracks = [this.active, this.activeTavernMusic].filter(
+			(active): active is ActiveLongForm => active !== null,
+		)
+		if (activeTracks.length === 0) {
+			this.startDesiredScene()
+			return
+		}
+		this.active = null
+		this.activeTavernMusic = null
+		this.outgoing = activeTracks
+		for (const active of activeTracks) this.fadeLongForm(active, AUDIO_TRANSITION_MS)
+		this.transitionTimer = this.scheduler.setTimeout(() => {
+			this.transitionTimer = null
+			for (const active of this.outgoing) this.stopLongFormNow(active)
+			this.outgoing = []
+			this.startDesiredScene()
+		}, AUDIO_TRANSITION_MS)
+	}
+
+	private startScene(scene: AudioScene): void {
 		this.generation += 1
 		const track = AUDIO_MANIFEST[scene] as AudioTrackDefinition
 		const generation = this.generation
-		const voice = this.playLongFormVoice(track, 0)
+		const primed = this.primedSceneVoice?.scene === scene ? this.primedSceneVoice : null
+		if (primed) this.primedSceneVoice = null
+		else this.stopPrimedSceneVoice()
+		const voice = primed?.voice ?? this.playLongFormVoice(track, 0)
+		if (!voice.sound.playing(voice.id)) voice.sound.play(voice.id)
 		const active: ActiveLongForm = {
 			layer: 'scene',
 			scene,
@@ -286,7 +394,7 @@ export class AudioManager {
 		const start = () => {
 			if (handled || !this.isActive(active)) return
 			handled = true
-			const targetVolume = getTrackVolume(active.track)
+			const targetVolume = this.trackVolume(active.track)
 			if (fadeMs > 0) voice.sound.fade(0, targetVolume, fadeMs, voice.id)
 			else voice.sound.volume(targetVolume, voice.id)
 			onStarted()
@@ -297,20 +405,7 @@ export class AudioManager {
 
 	private armLongFormVoice(active: ActiveLongForm, voice: LongFormVoice): void {
 		if (active.track.loopMode === 'crossfade') {
-			const schedule = () => {
-				if (!this.isActive(active) || active.current !== voice) return
-				const measuredDuration = voice.sound.duration(voice.id) * 1_000
-				const duration = Number.isFinite(measuredDuration) && measuredDuration > 0
-					? Math.min(measuredDuration, active.track.approximateDurationMs)
-					: active.track.approximateDurationMs
-				const delay = Math.max(250, duration - (active.track.crossfadeMs ?? 0))
-				active.loopTimer = this.scheduler.setTimeout(
-					() => this.crossfadeLoop(active, voice),
-					delay,
-				)
-			}
-			if (voice.sound.playing(voice.id)) schedule()
-			else voice.sound.once('play', schedule, voice.id)
+			this.scheduleCrossfade(active, voice)
 			voice.sound.once('end', () => {
 				if (this.isActive(active) && active.current === voice) {
 					if (active.pending) {
@@ -336,6 +431,23 @@ export class AudioManager {
 				this.active = null
 			}, voice.id)
 		}
+	}
+
+	private scheduleCrossfade(active: ActiveLongForm, voice: LongFormVoice): void {
+		const schedule = () => {
+			if (!this.isActive(active) || active.current !== voice || active.loopTimer) return
+			const measuredDuration = voice.sound.duration(voice.id) * 1_000
+			const duration = Number.isFinite(measuredDuration) && measuredDuration > 0
+				? Math.min(measuredDuration, active.track.approximateDurationMs)
+				: active.track.approximateDurationMs
+			const delay = Math.max(250, duration - (active.track.crossfadeMs ?? 0))
+			active.loopTimer = this.scheduler.setTimeout(
+				() => this.crossfadeLoop(active, voice),
+				delay,
+			)
+		}
+		if (voice.sound.playing(voice.id)) schedule()
+		else voice.sound.once('play', schedule, voice.id)
 	}
 
 	private crossfadeLoop(active: ActiveLongForm, previous: LongFormVoice, fadeOverride?: number): void {
@@ -372,12 +484,50 @@ export class AudioManager {
 		for (const active of activeTracks) this.stopLongForm(active, fadeMs)
 	}
 
-	private stopLongForm(active: ActiveLongForm, fadeMs: number): void {
-		if (active.loopTimer) this.scheduler.clearTimeout(active.loopTimer)
+	private stopAllLongForm(fadeMs: number): void {
+		this.cancelPendingTransition()
+		this.stopPrimedSceneVoice()
+		this.generation += 1
+		this.completedScene = null
+		this.stopActiveLongForm(fadeMs)
+	}
+
+	private cancelPendingTransition(): void {
+		if (this.transitionTimer) this.scheduler.clearTimeout(this.transitionTimer)
+		this.transitionTimer = null
+		for (const active of this.outgoing) this.stopLongFormNow(active)
+		this.outgoing = []
+	}
+
+	private stopPrimedSceneVoice(): void {
+		if (!this.primedSceneVoice) return
+		this.primedSceneVoice.voice.sound.stop(this.primedSceneVoice.voice.id)
+		this.primedSceneVoice = null
+	}
+
+	private fadeLongForm(active: ActiveLongForm, fadeMs: number): void {
+		if (active.loopTimer) {
+			this.scheduler.clearTimeout(active.loopTimer)
+			active.loopTimer = null
+		}
 		for (const voice of active.voices) {
 			voice.sound.fade(voice.sound.getVolume(voice.id), 0, fadeMs, voice.id)
-			this.scheduler.setTimeout(() => voice.sound.stop(voice.id), fadeMs)
 		}
+	}
+
+	private stopLongFormNow(active: ActiveLongForm): void {
+		if (active.loopTimer) this.scheduler.clearTimeout(active.loopTimer)
+		for (const voice of active.voices) voice.sound.stop(voice.id)
+		active.voices.clear()
+	}
+
+	private stopLongForm(active: ActiveLongForm, fadeMs: number): void {
+		if (fadeMs <= 0) {
+			this.stopLongFormNow(active)
+			return
+		}
+		this.fadeLongForm(active, fadeMs)
+		this.scheduler.setTimeout(() => this.stopLongFormNow(active), fadeMs)
 	}
 
 	private isActive(active: ActiveLongForm): boolean {
@@ -399,7 +549,7 @@ export class AudioManager {
 		const existing = this.sfxSounds.get(trackId)
 		if (existing) return existing
 		const track = AUDIO_MANIFEST[trackId]
-		const sound = this.backend.create(track, getTrackVolume(track))
+		const sound = this.backend.create(track, this.trackVolume(track))
 		this.sfxSounds.set(trackId, sound)
 		return sound
 	}
@@ -412,5 +562,9 @@ export class AudioManager {
 		const sound = this.backend.create(track, 0)
 		this.longFormSounds.set(key, sound)
 		return sound
+	}
+
+	private trackVolume(track: AudioTrackDefinition): number {
+		return getTrackVolume(track, this.busVolumes)
 	}
 }

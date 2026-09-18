@@ -4,8 +4,12 @@ import type { AudioScene } from './audioManifest'
 
 export type GameAudioCue = 'card' | 'monster-defeated' | 'shuffle'
 
-export function getGameAudioScene(state: GameState, localPlayerId: PlayerId): AudioScene {
-	if (state.phase === 'game-over') {
+export function getGameAudioScene(
+	state: GameState,
+	localPlayerId: PlayerId,
+	resultPresented = state.phase === 'game-over',
+): AudioScene {
+	if (state.phase === 'game-over' && resultPresented) {
 		return state.winnerId === localPlayerId ? 'victory' : 'loss'
 	}
 	return state.mode === 'sudden-death' ? 'sudden-death' : 'ambience'

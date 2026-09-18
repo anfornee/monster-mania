@@ -6,6 +6,7 @@ import {
 	AUDIO_MUTE_FADE_MS,
 	AUDIO_TRANSITION_MS,
 	TAVERN_MUSIC_IDS,
+	getTrackVolume,
 	type AudioTrackDefinition,
 } from './audioManifest'
 import type { AudioPlaybackBackend, AudioPlaybackEvent, AudioSound } from './audioPlayback'
@@ -15,16 +16,27 @@ class FakeSound implements AudioSound {
 	playCount = 0
 	loadCount = 0
 	stopCount = 0
+	pauseCount = 0
 	private nextId = 1
 	private readonly active = new Set<number>()
 	private readonly endListeners = new Map<number, Array<(id: number) => void>>()
 
-	play(): number {
+	play(existingId?: number): number {
+		if (existingId !== undefined) {
+			this.active.add(existingId)
+			return existingId
+		}
 		const id = this.nextId
 		this.nextId += 1
 		this.playCount += 1
 		this.active.add(id)
 		return id
+	}
+
+	pause(id?: number): void {
+		this.pauseCount += 1
+		if (id === undefined) this.active.clear()
+		else this.active.delete(id)
 	}
 
 	stop(id?: number): void {
@@ -150,13 +162,20 @@ describe('AudioManager', () => {
 
 	it('transitions through menu, gameplay, sudden death, results, and back to menu', () => {
 		const backend = new FakeBackend()
-		const manager = managerWith(backend)
+		const scheduler = new RecordingScheduler()
+		const manager = new AudioManager(backend, { scheduler, random: () => 0 })
 		manager.unlock()
 		manager.startGameAmbience()
+		expect(backend.playCount('ambience')).toBe(0)
+		scheduler.runFirst(AUDIO_TRANSITION_MS)
 		manager.startSuddenDeathMusic()
+		scheduler.runFirst(AUDIO_TRANSITION_MS)
 		manager.playVictoryMusic()
+		scheduler.runFirst(AUDIO_TRANSITION_MS)
 		manager.playLossMusic()
+		scheduler.runFirst(AUDIO_TRANSITION_MS)
 		manager.playMenuMusic()
+		scheduler.runFirst(AUDIO_TRANSITION_MS)
 		expect(backend.playCount('menu')).toBe(2)
 		expect(backend.playCount('ambience')).toBe(1)
 		expect(backend.playCount('tavern-music-1')).toBe(1)
@@ -165,12 +184,50 @@ describe('AudioManager', () => {
 		expect(backend.playCount('loss')).toBe(1)
 	})
 
+	it('finishes the outgoing fade before starting only the latest requested scene', () => {
+		const backend = new FakeBackend()
+		const scheduler = new RecordingScheduler()
+		const manager = new AudioManager(backend, { scheduler })
+		manager.unlock()
+		manager.startGameAmbience()
+		manager.playVictoryMusic()
+
+		expect(backend.playCount('ambience')).toBe(0)
+		expect(backend.playCount('victory')).toBe(0)
+		expect(backend.sounds.get('menu')?.[0].playing()).toBe(true)
+
+		scheduler.runFirst(AUDIO_TRANSITION_MS)
+
+		expect(backend.sounds.get('menu')?.[0].playing()).toBe(false)
+		expect(backend.playCount('ambience')).toBe(0)
+		expect(backend.playCount('victory')).toBe(1)
+	})
+
+	it('primes menu playback during the return gesture without audible overlap', () => {
+		const backend = new FakeBackend()
+		const scheduler = new RecordingScheduler()
+		const manager = new AudioManager(backend, { scheduler })
+		manager.unlock()
+		manager.startGameAmbience()
+		scheduler.runFirst(AUDIO_TRANSITION_MS)
+
+		manager.prepareMenuMusicForUserGesture()
+
+		expect(backend.playCount('menu')).toBe(2)
+		expect(backend.sounds.get('ambience')?.[0].playing()).toBe(true)
+		scheduler.runFirst(AUDIO_TRANSITION_MS)
+		expect(backend.playCount('menu')).toBe(2)
+		expect(backend.sounds.get('ambience')?.[0].playing()).toBe(false)
+		expect(backend.sounds.get('menu')?.[0].playing()).toBe(true)
+	})
+
 	it('plays all tavern music as a playlist and stops it for priority music', () => {
 		const backend = new FakeBackend()
 		const scheduler = new RecordingScheduler()
 		const manager = new AudioManager(backend, { scheduler })
 		manager.unlock()
 		manager.startGameAmbience()
+		scheduler.runFirst(AUDIO_TRANSITION_MS)
 
 		for (let index = 0; index < TAVERN_MUSIC_IDS.length; index += 1) {
 			const trackId = TAVERN_MUSIC_IDS[index]
@@ -186,6 +243,7 @@ describe('AudioManager', () => {
 		expect(backend.sounds.get('tavern-music-4')?.[0].playing()).toBe(false)
 
 		manager.startGameAmbience()
+		scheduler.runFirst(AUDIO_TRANSITION_MS)
 		expect(backend.playCount('tavern-music-1')).toBe(2)
 		manager.playVictoryMusic()
 		scheduler.runAll(AUDIO_TRANSITION_MS)
@@ -199,6 +257,7 @@ describe('AudioManager', () => {
 		const manager = new AudioManager(backend, { scheduler })
 		manager.unlock()
 		manager.startGameAmbience()
+		scheduler.runFirst(AUDIO_TRANSITION_MS)
 
 		const ambienceSounds = backend.sounds.get('ambience') ?? []
 		expect(ambienceSounds).toHaveLength(2)
@@ -215,11 +274,11 @@ describe('AudioManager', () => {
 		expect(AUDIO_MUTE_FADE_MS).toBe(320)
 		expect(AUDIO_MANIFEST.menu.approximateDurationMs).toBe(152_000)
 		expect(AUDIO_MANIFEST.menu.loopMode).toBe('native')
-		expect(AUDIO_MANIFEST.ambience.volume).toBe(.85)
+		expect(AUDIO_MANIFEST.ambience.volume).toBe(.75)
 		expect(AUDIO_MANIFEST.ambience.approximateDurationMs).toBe(21_000)
 		expect(AUDIO_MANIFEST.ambience.crossfadeMs).toBe(12_000)
 		for (const trackId of TAVERN_MUSIC_IDS) {
-			expect(AUDIO_MANIFEST[trackId].volume).toBe(.70)
+			expect(AUDIO_MANIFEST[trackId].volume).toBe(.65)
 		}
 		expect(AUDIO_MANIFEST['sudden-death'].volume).toBe(.84)
 		expect(AUDIO_MANIFEST['sudden-death'].crossfadeMs).toBe(5_000)
@@ -230,7 +289,8 @@ describe('AudioManager', () => {
 
 	it('can attempt the desired scene again after a provider lifecycle cleanup', () => {
 		const backend = new FakeBackend()
-		const manager = managerWith(backend)
+		const scheduler = new RecordingScheduler()
+		const manager = new AudioManager(backend, { scheduler })
 		manager.unlock()
 		manager.dispose()
 		manager.unlock()
@@ -282,10 +342,12 @@ describe('AudioManager', () => {
 
 	it('layers card and monster SFX without stopping gameplay ambience', () => {
 		const backend = new FakeBackend()
-		const manager = managerWith(backend)
+		const scheduler = new RecordingScheduler()
+		const manager = new AudioManager(backend, { scheduler, random: () => 0 })
 		const state = structuredClone(createSandboxScenario('fresh-game').state)
 		manager.unlock()
 		manager.syncGameState(state, 'player-1')
+		scheduler.runFirst(AUDIO_TRANSITION_MS)
 		state.events.push(
 			{ id: 2, type: 'action-played', message: 'An Action was played.' },
 			{ id: 3, type: 'monster-defeated', message: 'A Monster was defeated.' },
@@ -302,9 +364,28 @@ describe('AudioManager', () => {
 		const manager = managerWith(backend)
 		manager.unlock()
 		manager.handleVisibilityChange(false)
+		expect(backend.sounds.get('menu')?.[0].pauseCount).toBe(1)
+		expect(backend.sounds.get('menu')?.[0].playing()).toBe(false)
 		manager.handleVisibilityChange(true)
 		expect(backend.resumeCount).toBe(2)
 		expect(backend.playCount('menu')).toBe(1)
+	})
+
+	it('uses the manifest volume as the ceiling for relative bus volume', () => {
+		const track = AUDIO_MANIFEST.menu
+		expect(getTrackVolume(track)).toBe(track.volume)
+		expect(getTrackVolume(track, { music: .5, ambience: 1, sfx: 1 })).toBe(track.volume * .5)
+		expect(getTrackVolume(track, { music: 2, ambience: 1, sfx: 1 })).toBe(track.volume)
+		expect(getTrackVolume(track, { music: Number.NaN, ambience: 1, sfx: 1 })).toBe(0)
+	})
+
+	it('keeps gameplay audio until the result presentation is visible', () => {
+		const state = structuredClone(createSandboxScenario('fresh-game').state)
+		state.mode = 'sudden-death'
+		state.phase = 'game-over'
+		state.winnerId = 'player-1'
+		expect(getGameAudioScene(state, 'player-1', false)).toBe('sudden-death')
+		expect(getGameAudioScene(state, 'player-1', true)).toBe('victory')
 	})
 })
 

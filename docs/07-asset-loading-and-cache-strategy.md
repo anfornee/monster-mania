@@ -6,6 +6,8 @@
 
 The React root renders `GameBootScreen` before the application UI mounts. The boot screen requests and decodes the critical menu images and fetches the short SFX tier, reports progress from completed attempts, and then reveals the menu beneath a short fade. A 360 ms minimum presentation avoids a one-frame 0% to 100% flash on a warm visit without imposing a multi-second artificial delay.
 
+The boot gate is application-level readiness, not a route transition. Menu-level navigation such as Tavern to Card Gallery stays inside the mounted React application, preserves the shared audio manager and menu track, and does not replay the boot screen. Directly loading or refreshing a menu route still performs the normal initial boot gate.
+
 After the menu is visible, gameplay artwork and priority audio begin warming during `requestIdleCallback` when available, with a zero-delay fallback. Optional long-form audio warms 15 seconds later unless Save-Data or a 2G connection is active.
 
 ```text

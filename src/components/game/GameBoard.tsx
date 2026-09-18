@@ -73,7 +73,8 @@ export function GameBoard({
 	presentationStep = null,
 	onPresentationComplete,
 }: GameBoardProps) {
-	useGameAudio(state, localPlayerId)
+	const resultPresented = state.phase === 'game-over' && !presentationStep
+	useGameAudio(state, localPlayerId, resultPresented)
 	const localPlayer = getPlayer(state, localPlayerId) ?? state.players[0]
 	const opponent = getOpponent(state, localPlayerId)
 	const currentPlayer = getCurrentPlayer(state)
@@ -169,11 +170,19 @@ export function GameBoard({
 				</div>
 			</section>
 
-			<section className="turn-plaque" aria-live="polite">
-				<span>Turn {state.turn.number}</span>
-				<strong>{state.phase === 'game-over' ? 'Match complete' : currentPlayer.id === localPlayerId ? 'Your turn' : `${currentPlayer.name} is thinking`}</strong>
-				<small>{state.mode === 'sudden-death' ? 'Sudden Death · hand limit 4' : pendingForLocalPlayer ? 'Choose cards to discard' : 'Action Phase · hand limit 5'}</small>
-			</section>
+			<div className="turn-status">
+				<section className="turn-plaque" aria-live="polite">
+					<span>Turn {state.turn.number}</span>
+					<strong>{state.phase === 'game-over' ? 'Match complete' : currentPlayer.id === localPlayerId ? 'Your turn' : `${currentPlayer.name} is thinking`}</strong>
+					<small>{state.mode === 'sudden-death' ? 'Sudden Death · hand limit 4' : pendingForLocalPlayer ? 'Choose cards to discard' : 'Action Phase · hand limit 5'}</small>
+				</section>
+				<details className="game-log">
+					<summary>Hunter's journal <span>{state.events.length} entries</span></summary>
+					<ol>
+						{[...state.events].reverse().map((event) => <li key={event.id}>{event.message}</li>)}
+					</ol>
+				</details>
+			</div>
 
 			<section className="arena" aria-labelledby="arena-title">
 				<div className="arena-heading">
@@ -224,7 +233,7 @@ export function GameBoard({
 
 			<p className="latest-event" aria-live="polite"><span aria-hidden="true" />{statusMessage}</p>
 
-			<section className={`table-seat player-seat${isLocalTurn ? ' active-seat' : ''}`} aria-labelledby="hand-title">
+			<section className={`table-seat player-seat${currentPlayer.id === localPlayerId && state.phase !== 'game-over' ? ' active-seat' : ''}`} aria-labelledby="hand-title">
 				<div className="player-seat-header">
 					<div className="seat-identity">
 						<span className="seat-marker local" aria-hidden="true">Y</span>
@@ -301,13 +310,6 @@ export function GameBoard({
 					)}
 				</div>
 			</section>
-
-			<details className="game-log">
-				<summary>Hunter's journal <span>{state.events.length} entries</span></summary>
-				<ol>
-					{[...state.events].reverse().map((event) => <li key={event.id}>{event.message}</li>)}
-				</ol>
-			</details>
 
 			<CardInspector card={inspectedCard} onClose={() => setInspectedCard(null)} />
 			{presentationStep?.type === 'opponent-card' ? (

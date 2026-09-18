@@ -4,7 +4,8 @@ import type { AudioTrackDefinition } from './audioManifest'
 export type AudioPlaybackEvent = 'play' | 'end'
 
 export interface AudioSound {
-	play: () => number
+	play: (id?: number) => number
+	pause: (id?: number) => void
 	stop: (id?: number) => void
 	fade: (from: number, to: number, durationMs: number, id: number) => void
 	volume: (volume: number, id?: number) => void
@@ -23,26 +24,45 @@ export interface AudioPlaybackBackend {
 class HowlerSound implements AudioSound {
 	private readonly howl: Howl
 	private readonly activeIds = new Set<number>()
+	private readonly pausedIds = new Set<number>()
 
 	constructor(howl: Howl) {
 		this.howl = howl
 	}
 
-	play(): number {
-		const id = this.howl.play()
+	play(existingId?: number): number {
+		const id = this.howl.play(existingId)
 		this.activeIds.add(id)
-		this.howl.once('end', () => this.activeIds.delete(id), id)
+		this.pausedIds.delete(id)
+		this.howl.once('end', () => {
+			this.activeIds.delete(id)
+			this.pausedIds.delete(id)
+		}, id)
 		this.howl.once('playerror', () => {
 			this.howl.once('unlock', () => {
-				if (this.activeIds.has(id)) this.howl.play(id)
+				if (this.activeIds.has(id) && !this.pausedIds.has(id)) this.howl.play(id)
 			})
 		}, id)
 		return id
 	}
 
+	pause(id?: number): void {
+		if (id === undefined) {
+			for (const activeId of this.activeIds) this.pausedIds.add(activeId)
+		} else {
+			this.pausedIds.add(id)
+		}
+		this.howl.pause(id)
+	}
+
 	stop(id?: number): void {
-		if (id === undefined) this.activeIds.clear()
-		else this.activeIds.delete(id)
+		if (id === undefined) {
+			this.activeIds.clear()
+			this.pausedIds.clear()
+		} else {
+			this.activeIds.delete(id)
+			this.pausedIds.delete(id)
+		}
 		this.howl.stop(id)
 	}
 

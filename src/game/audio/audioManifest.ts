@@ -24,13 +24,13 @@ export interface AudioTrackDefinition {
 
 const audioPath = (filename: string) => versionAssetPath(`/assets/audio/${filename}`)
 
-export const AUDIO_BUS_VOLUMES: Record<AudioBus, number> = {
-	music: .5,
-	ambience: .36,
-	sfx: .74,
-}
+export type AudioBusVolumes = Record<AudioBus, number>
 
-export const AUDIO_MASTER_VOLUME = .9
+export const DEFAULT_AUDIO_BUS_VOLUMES: AudioBusVolumes = {
+	music: 1,
+	ambience: 1,
+	sfx: 1,
+}
 export const AUDIO_TRANSITION_MS = 1_200
 export const AUDIO_MUTE_FADE_MS = 320
 
@@ -48,7 +48,7 @@ export const AUDIO_MANIFEST = {
 		id: 'ambience',
 		src: audioPath('tavern-ambience.mp3'),
 		bus: 'ambience',
-		volume: .85,
+		volume: .75,
 		preloadTier: 'priority',
 		loopMode: 'crossfade',
 		approximateDurationMs: 21_000,
@@ -58,7 +58,7 @@ export const AUDIO_MANIFEST = {
 		id: 'tavern-music-1',
 		src: audioPath('tavern-music-1.mp3'),
 		bus: 'music',
-		volume: .70,
+		volume: .65,
 		preloadTier: 'priority',
 		loopMode: 'none',
 		approximateDurationMs: 197_000,
@@ -67,7 +67,7 @@ export const AUDIO_MANIFEST = {
 		id: 'tavern-music-2',
 		src: audioPath('tavern-music-2.mp3'),
 		bus: 'music',
-		volume: .70,
+		volume: .65,
 		preloadTier: 'background',
 		loopMode: 'none',
 		approximateDurationMs: 336_000,
@@ -76,7 +76,7 @@ export const AUDIO_MANIFEST = {
 		id: 'tavern-music-3',
 		src: audioPath('tavern-music-3.mp3'),
 		bus: 'music',
-		volume: .70,
+		volume: .65,
 		preloadTier: 'background',
 		loopMode: 'none',
 		approximateDurationMs: 269_000,
@@ -85,7 +85,7 @@ export const AUDIO_MANIFEST = {
 		id: 'tavern-music-4',
 		src: audioPath('tavern-music-4.mp3'),
 		bus: 'music',
-		volume: .70,
+		volume: .65,
 		preloadTier: 'background',
 		loopMode: 'none',
 		approximateDurationMs: 173_000,
@@ -183,6 +183,14 @@ export const TAVERN_MUSIC_IDS: TavernMusicTrackId[] = [
 	'tavern-music-4',
 ]
 
-export function getTrackVolume(track: AudioTrackDefinition): number {
-	return AUDIO_MASTER_VOLUME * AUDIO_BUS_VOLUMES[track.bus] * track.volume
+export function clampAudioBusVolume(volume: number): number {
+	if (!Number.isFinite(volume)) return 0
+	return Math.min(1, Math.max(0, volume))
+}
+
+export function getTrackVolume(
+	track: AudioTrackDefinition,
+	busVolumes: AudioBusVolumes = DEFAULT_AUDIO_BUS_VOLUMES,
+): number {
+	return track.volume * clampAudioBusVolume(busVolumes[track.bus])
 }

@@ -31,7 +31,9 @@ AudioProvider (preference, initial playback attempt, gesture fallback, visibilit
 | Card interaction | `card-1.mp3` through `card-4.mp3` | Random variant without an immediate repeat |
 | Initial or recycled deck shuffle | `shuffle-cards.mp3` | One cue per authoritative shuffle event batch |
 
-Scene changes fade between long-form tracks over 1.2 seconds. Normal gameplay runs the tavern music playlist and tavern ambience together; entering Sudden Death or a game result fades out both before the dedicated music takes over. Disabling sound immediately stops SFX and fades long-form audio over 0.32 seconds; enabling it resumes the scene that the application currently wants.
+Scene changes use a queued 1.2-second handoff: every outgoing long-form layer fades completely and stops before the latest requested scene begins fading in. Rapid scene requests collapse to the most recent intent, so navigation cannot leave competing menu and gameplay tracks alive. Normal gameplay runs the tavern music playlist and tavern ambience together; entering Sudden Death or a game result fades out both before the dedicated music takes over. Disabling sound immediately stops SFX and fades long-form audio over 0.32 seconds; enabling it resumes the scene that the application currently wants.
+
+Return-to-Tavern controls prime the menu source at zero volume inside the initiating user gesture. This preserves mobile browser playback permission while the gameplay layers finish their fade; the prepared menu voice becomes audible only after the handoff completes.
 
 For crossfade loops, the alternate player is loaded when the scene starts. The manager uses the earlier of the browser-reported duration and the manifest duration, starts the alternate player before the overlap, and waits for its `play` event before fading the current player. The current tavern ambience is approximately 21 seconds long; the menu track is approximately 2 minutes 32 seconds. The first tavern music track is priority-warmed and the remaining playlist tracks warm in the background.
 
@@ -43,7 +45,7 @@ For crossfade loops, the alternate player is loaded when the scene starts. The m
 - `draw-deck-recycled` emits a shuffle cue. A paired `monsters-rotated` marker remains in the same event batch and does not create a second sound.
 - `action-played`, `cards-drawn`, `card-discarded`, and `ultimate-used` emit one randomized card cue per event.
 - `monster-defeated` emits the defeat cue. A Sudden Death `game-won` event also emits it for the Infinity Beast.
-- `sudden-death-started` is reflected by `state.mode`, which selects Sudden Death music; `phase`, `winnerId`, and the local player select victory or loss.
+- `sudden-death-started` is reflected by `state.mode`, which selects Sudden Death music. Victory or loss additionally requires the result presentation to be visible, so the final defeat SFX and blocking Monster Defeated announcement complete before result music is requested.
 
 Audio remains presentation-only. It never changes `GameState`, affects legal actions, or adds audio rules to the engine.
 
@@ -51,7 +53,13 @@ Audio remains presentation-only. It never changes `GameState`, affects legal act
 
 Sound defaults on. The fixed sound button exposes its state with `aria-pressed` and persists it under `monster-mania:audio-enabled:v1`. The preference is restored before any playback attempt.
 
-`AudioProvider` attempts to start the menu scene as soon as the boot screen hands off to the application. Browsers may still block audible playback until a real pointer or keyboard gesture; the provider listens for that first gesture and resumes Howler without bypassing the browser policy. Playback errors may retry after Howler's unlock event only while the same sound is still active. Returning to a visible tab resumes the shared audio context; it does not duplicate tracks.
+`AudioProvider` attempts to start the menu scene as soon as the boot screen hands off to the application. Browsers may still block audible playback until a real pointer or keyboard gesture; the provider listens for that first gesture and resumes Howler without bypassing the browser policy. Playback errors may retry after Howler's unlock event only while the same sound is still active and not visibility-paused.
+
+The provider owns one document `visibilitychange` listener. Hiding the document abandons one-shot SFX, pauses active long-form voices, and cancels an in-progress handoff without starting its destination. Returning to a visible document resumes the current logical scene, or starts the latest desired scene when application state changed while hidden. Crossfade scheduling is re-armed without creating another logical track.
+
+## Bus volumes
+
+Every manifest entry belongs to `music`, `ambience`, or `sfx`. `AudioManager` holds a relative value for each bus, currently initialized to `1` (100%), and exposes typed getters/setters for a later Settings screen. Effective output is `manifest volume × clamped bus volume`; a bus value is always clamped to `0...1`, so user preference can never amplify an asset above its authored manifest ceiling. Existing and future sounds both pick up the current bus value.
 
 ## Loading and caching
 
@@ -69,4 +77,4 @@ When replacing an audio file at the same public path, bump `GAME_ASSET_VERSION` 
 4. Add or update unit tests for disabled playback, transitions, event dedupe, or variant behavior.
 5. Bump `GAME_ASSET_VERSION` when replacing an existing path, then build and verify the generated worker's audio route.
 
-Tune overall mix with `AUDIO_MASTER_VOLUME` and `AUDIO_BUS_VOLUMES`; tune an individual track with its manifest `volume`. Crossfade lengths belong on the relevant manifest entries.
+Tune an individual authored maximum with its manifest `volume`. User-facing relative mix belongs in the manager's bus values and must remain within `0...1`. Crossfade lengths belong on the relevant manifest entries.

@@ -14,7 +14,7 @@ const FILTERS: Array<{ id: GalleryCategory; label: string }> = [
 	{ id: 'actions', label: 'Actions' },
 ]
 
-export function CardGallery({ catalog }: { catalog: GameCatalog }) {
+export function CardGallery({ catalog, onBack }: { catalog: GameCatalog; onBack?: () => void }) {
 	const [category, setCategory] = useState<GalleryCategory>('all')
 	const [inspectedCard, setInspectedCard] = useState<InspectableCard | null>(null)
 	const entries = getCardGalleryEntries(catalog)
@@ -23,7 +23,10 @@ export function CardGallery({ catalog }: { catalog: GameCatalog }) {
 	return (
 		<main className="card-gallery-page">
 			<nav className="gallery-nav" aria-label="Card gallery navigation">
-				<a className="back-button" href="/">← Tavern</a>
+				<a className="back-button" href="/" onClick={onBack ? (event) => {
+					event.preventDefault()
+					onBack()
+				} : undefined}>← Tavern</a>
 				<span>Card gallery</span>
 			</nav>
 			<header className="gallery-header">

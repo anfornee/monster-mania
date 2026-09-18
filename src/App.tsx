@@ -80,11 +80,12 @@ function loadSavedSoloGame(playerName: string): GameState | null {
 	}
 }
 
-function HomeScreen({ hasSavedGame, onPlaySolo, onResume, onOpenOnline }: {
+function HomeScreen({ hasSavedGame, onPlaySolo, onResume, onOpenOnline, onOpenGallery }: {
 	hasSavedGame: boolean
 	onPlaySolo: () => void
 	onResume: () => void
 	onOpenOnline: () => void
+	onOpenGallery: () => void
 }) {
 	return (
 		<main className="home-screen">
@@ -92,7 +93,10 @@ function HomeScreen({ hasSavedGame, onPlaySolo, onResume, onOpenOnline }: {
 			<nav className="home-nav" aria-label="Primary navigation">
 				<img src={GAME_ASSET_PATHS.logo} alt="Monster Mania" />
 				<div className="home-nav-links">
-					<a href="/cards">Card gallery</a>
+					<a href="/cards" onClick={(event) => {
+						event.preventDefault()
+						onOpenGallery()
+					}}>Card gallery</a>
 					<a href="/dev/rules">Rules &amp; Sandbox</a>
 				</div>
 			</nav>
@@ -166,6 +170,7 @@ function NameSetup({ initialName, onBack, onStart }: {
 
 function GameApplication() {
 	const { manager: audio } = useAudio()
+	const [pathname, setPathname] = useState(() => window.location.pathname)
 	const [screen, setScreen] = useState<AppScreen>(() => (
 		loadOnlineTableSession(window.localStorage) ? 'online' : 'home'
 	))
@@ -188,20 +193,27 @@ function GameApplication() {
 	const actionsResolving = handoffLocked || Boolean(pendingPresentation) || decisionPlayer?.controller === 'computer'
 
 	useEffect(() => {
-		if (screen !== 'solo') audio.playMenuMusic()
-	}, [audio, screen])
+		const handlePopState = () => setPathname(window.location.pathname)
+		window.addEventListener('popstate', handlePopState)
+		return () => window.removeEventListener('popstate', handlePopState)
+	}, [])
+
+	const navigate = useCallback((nextPath: string) => {
+		if (window.location.pathname !== nextPath) window.history.pushState({}, '', nextPath)
+		setPathname(nextPath)
+		window.scrollTo({ top: 0 })
+	}, [])
 
 	const returnToMenu = useCallback(() => {
-		// Keep this in the click path as well as the screen effect so mobile
-		// browsers can restart menu audio under the user's gesture.
-		audio.playMenuMusic()
+		// Prime the menu source while mobile browsers still consider this click
+		// a user activation. It remains silent until the scene handoff completes.
+		audio.prepareMenuMusicForUserGesture()
 		setScreen('home')
 	}, [audio])
 
 	const openSoloSetup = useCallback(() => {
-		audio.playMenuMusic()
 		setScreen('setup')
-	}, [audio])
+	}, [])
 
 	const commitGameState = useCallback((nextState: GameState, handoffToHuman = false) => {
 		if (handoffToHuman && nextState.phase !== 'game-over') setHandoffLocked(true)
@@ -304,8 +316,10 @@ function GameApplication() {
 		return () => window.clearTimeout(timeout)
 	}, [beginAcceptedTransition, game, pendingPresentation])
 
-	if (window.location.pathname === '/dev/rules') return <RulesSandbox />
-	if (window.location.pathname === '/cards') return <CardGallery catalog={CORE_CATALOG} />
+	if (pathname === '/dev/rules') return <RulesSandbox />
+	if (pathname === '/cards') return (
+		<CardGallery catalog={CORE_CATALOG} onBack={() => navigate('/')} />
+	)
 
 	const beginSolo = (name: string) => {
 		const savedName = savePlayerName(localStorage, name)
@@ -380,7 +394,7 @@ function GameApplication() {
 			setGame(resumableGame)
 			setScreen('solo')
 		}
-	}} onOpenOnline={() => setScreen('online')} />
+	}} onOpenOnline={() => setScreen('online')} onOpenGallery={() => navigate('/cards')} />
 }
 
 const APP_ASSET_STYLES = {
