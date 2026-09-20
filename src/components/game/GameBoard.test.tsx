@@ -29,6 +29,21 @@ describe('table presentation privacy and actions', () => {
 		expect(markup).toMatch(/title="Inspect (Bow|Grenade|Mace|Sword|Spear|Gun \/ Rifle|Black Hole)"/)
 	})
 
+	it('can limit otherwise legal actions for a guided lesson without hiding inspection', () => {
+		const state = createSandboxScenario('action-chain').state
+		const markup = renderToStaticMarkup(
+			<GameBoard
+				state={state}
+				localPlayerId="player-1"
+				onAction={() => undefined}
+				isActionAllowed={() => false}
+			/>,
+		)
+
+		expect(markup).toContain('title="Inspect Draw 2"')
+		expect(markup).toContain('title="Follow the current training instruction."')
+	})
+
 	it('renders working match-end destinations with final scores', () => {
 		const ready = createSandboxScenario('infinity-beast-beatable').state
 		const finished = applyGameAction(ready, {

@@ -292,6 +292,30 @@ The following checks belong to the later transport/persistence milestone and mus
 
 ---
 
+## Tutorials
+
+- [ ] Tutorials is always available from the main navigation
+- [ ] Menu-to-Tutorials navigation stays inside the mounted application and preserves menu audio
+- [ ] Classic, Ritual, and Chaos use stable mode IDs and shared tutorial configuration
+- [ ] Only Classic exposes a working tutorial entry point
+- [ ] Ritual and Chaos appear as non-interactive Coming Soon entries without invented rules
+- [ ] Classic training begins from a deterministic state that passes `validateGameState()`
+- [ ] Guided moves dispatch ordinary `GameAction`s through the shared engine
+- [ ] Actions outside the current Classic lesson are unavailable
+- [ ] Classic demonstrates full Draw 2 resolution before requiring a discard
+- [ ] Classic guides card selection and explicit discard confirmation before resuming the Action Phase
+- [ ] Classic explains and exercises ending a turn when the player cannot or chooses not to defeat a Monster
+- [ ] The end-turn lesson draws one card and passes play without allowing the new card to be used immediately
+- [ ] The end-turn draw delivers Black Hole for the final tutorial lesson
+- [ ] Classic finishes by demonstrating Black Hole against a regular Monster without spending normal requirement Weapons
+- [ ] Classic completion is stored independently and remains informational
+- [ ] A completed Classic tutorial can be replayed from the beginning
+- [ ] Exiting active training returns to Tutorials rather than forcing the Tavern menu
+- [ ] Tutorial completion offers clear Return to Tutorials and Replay Classic actions
+- [ ] Directly loading `/tutorials` or `/tutorials/classic` performs only the normal initial boot gate
+
+---
+
 ## UI and Accessibility
 
 - [ ] Every game action is keyboard operable through a semantic control

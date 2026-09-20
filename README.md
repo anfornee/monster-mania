@@ -73,6 +73,8 @@ The structure grows by milestone, so some destination directories may not exist 
 
 The permanent Rules Sandbox lives at `/dev/rules`. It includes deterministic legal presets, state validation status, interactive actions, and raw serialized state inspection.
 
+Hunter's Training lives at `/tutorials`. Classic provides the first deterministic guided tutorial; Ritual and Chaos are cataloged as future modes without speculative gameplay.
+
 ## Current limitations
 
 Online Table now has a Firebase Anonymous Auth identity abstraction and a Firestore-backed lobby that creates, joins, observes, and restores two-seat membership across browsers. `src/game/network/` also retains the in-memory authoritative gameplay proof, which accepts actions through the shared engine and returns player-filtered views. These layers are not wired into synchronized turns yet: there is no trusted deployed gameplay command handler, durable authoritative `GameState`, presence/expiration policy, or full-match integration test. The next steps are described in the [Online Table implementation guide](docs/online-table-implementation-guide.md) and [roadmap](docs/04-roadmap.md).

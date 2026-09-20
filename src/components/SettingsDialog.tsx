@@ -115,7 +115,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
 					<span className="eyebrow">Hunter's preferences</span>
 					<h2 id="settings-title">Settings</h2>
 				</div>
-				<button type="button" className="settings-close" onClick={close} aria-label="Close settings">×</button>
+				<button type="button" className="settings-close" onClick={close} aria-label="Close settings">X</button>
 			</div>
 			<section className="settings-section" aria-labelledby="audio-settings-title">
 				<h3 id="audio-settings-title">Audio</h3>

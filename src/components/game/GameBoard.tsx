@@ -35,6 +35,7 @@ interface GameBoardProps {
 	catalog?: GameCatalog
 	compact?: boolean
 	actionsResolving?: boolean
+	isActionAllowed?: (action: GameAction) => boolean
 	presentationStep?: GamePresentationStep | null
 	onPresentationComplete?: () => void
 }
@@ -70,6 +71,7 @@ export function GameBoard({
 	catalog = CORE_CATALOG,
 	compact = false,
 	actionsResolving = false,
+	isActionAllowed,
 	presentationStep = null,
 	onPresentationComplete,
 }: GameBoardProps) {
@@ -89,6 +91,7 @@ export function GameBoard({
 	const [handScrollCues, setHandScrollCues] = useState({ left: false, right: false })
 	const handRef = useRef<HTMLDivElement>(null)
 	const handCardCount = localPlayer.hand.length
+	const actionAllowed = (action: GameAction) => isActionAllowed?.(action) ?? true
 
 	useEffect(() => {
 		const hand = handRef.current
@@ -132,12 +135,17 @@ export function GameBoard({
 	}
 
 	const activateCard = (card: PlayerCardInstance) => {
-		if (pendingForLocalPlayer && !actionsResolving) {
-			onAction({ type: 'SELECT_DISCARD', playerId: localPlayerId, cardInstanceId: card.instanceId })
+		const discardAction: GameAction = { type: 'SELECT_DISCARD', playerId: localPlayerId, cardInstanceId: card.instanceId }
+		if (pendingForLocalPlayer && !actionsResolving && actionAllowed(discardAction)) {
+			onAction(discardAction)
 			return
 		}
 		const definition = catalog.playerCards[card.definitionId]
-		const playable = isLocalTurn && state.turn.actionPhaseOpen && definition.category === 'action'
+		const playAction: GameAction = { type: 'PLAY_ACTION_CARD', playerId: localPlayerId, cardInstanceId: card.instanceId }
+		const playable = isLocalTurn
+			&& state.turn.actionPhaseOpen
+			&& definition.category === 'action'
+			&& actionAllowed(playAction)
 		setInspectedCard({
 			name: definition.name,
 			assetPath: definition.assetPath,
@@ -145,7 +153,7 @@ export function GameBoard({
 			meta: definition.category.replace('-', ' '),
 			playLabel: 'Play card',
 			onPlay: playable
-				? () => onAction({ type: 'PLAY_ACTION_CARD', playerId: localPlayerId, cardInstanceId: card.instanceId })
+				? () => onAction(playAction)
 				: undefined,
 		})
 	}
@@ -198,15 +206,28 @@ export function GameBoard({
 					<div className="monster-row">
 						{monsters.map((monster) => {
 							const requirementStatus = getRequirementStatus(localPlayer.hand, monster.requiredWeapons, catalog)
+							const defeatAction: GameAction = { type: 'DEFEAT_MONSTER', playerId: localPlayerId, monsterId: monster.id }
+							const ultimateAction: Extract<GameAction, { type: 'USE_ULTIMATE_WEAPON' }> | null = ultimate ? {
+								type: 'USE_ULTIMATE_WEAPON',
+								playerId: localPlayerId,
+								cardInstanceId: ultimate.instanceId,
+								monsterId: monster.id,
+							} : null
+							const canDefeatByRules = isLocalTurn && canDefeatMonster(state, localPlayerId, monster.id, catalog)
+							const defeatAllowed = actionAllowed(defeatAction)
+							const restrictedByLesson = canDefeatByRules && !defeatAllowed
 							return (
 								<MonsterCard
 									key={monster.id}
 									monster={monster}
-									canDefeat={isLocalTurn && canDefeatMonster(state, localPlayerId, monster.id, catalog)}
+									canDefeat={canDefeatByRules && defeatAllowed}
 									canUseUltimate={Boolean(
-										isLocalTurn && ultimate && canUseUltimateWeapon(state, localPlayerId, ultimate.instanceId, monster.id, catalog),
+										isLocalTurn
+										&& ultimateAction
+										&& actionAllowed(ultimateAction)
+										&& canUseUltimateWeapon(state, localPlayerId, ultimateAction.cardInstanceId, monster.id, catalog),
 									)}
-									disabledReason={isLocalTurn ? 'Your hand is missing a required Weapon.' : 'Wait for your turn.'}
+									disabledReason={!isLocalTurn ? 'Wait for your turn.' : restrictedByLesson ? 'Follow the current training instruction.' : 'Your hand is missing a required Weapon.'}
 									requirementStatus={requirementStatus}
 									onInspect={() => setInspectedCard({
 										name: monster.name,
@@ -214,13 +235,8 @@ export function GameBoard({
 										description: monster.lore,
 										meta: `${monster.points === 'infinity' ? 'Victory' : `${monster.points} point${monster.points === 1 ? '' : 's'}`} · Requires ${monster.requiredWeapons.join(', ')}`,
 									})}
-									onDefeat={() => onAction({ type: 'DEFEAT_MONSTER', playerId: localPlayerId, monsterId: monster.id })}
-									onUseUltimate={() => ultimate && onAction({
-										type: 'USE_ULTIMATE_WEAPON',
-										playerId: localPlayerId,
-										cardInstanceId: ultimate.instanceId,
-										monsterId: monster.id,
-									})}
+									onDefeat={() => onAction(defeatAction)}
+									onUseUltimate={() => ultimateAction && onAction(ultimateAction)}
 								/>
 							)
 						})}
@@ -250,7 +266,11 @@ export function GameBoard({
 							const definition = catalog.playerCards[card.definitionId]
 							const isAction = definition.category === 'action'
 							const selected = state.pendingDiscard?.selectedCardInstanceIds.includes(card.instanceId) ?? false
-							const playable = pendingForLocalPlayer || (isLocalTurn && state.turn.actionPhaseOpen && isAction)
+							const cardAction: GameAction = pendingForLocalPlayer
+								? { type: 'SELECT_DISCARD', playerId: localPlayerId, cardInstanceId: card.instanceId }
+								: { type: 'PLAY_ACTION_CARD', playerId: localPlayerId, cardInstanceId: card.instanceId }
+							const playable = (pendingForLocalPlayer || (isLocalTurn && state.turn.actionPhaseOpen && isAction))
+								&& actionAllowed(cardAction)
 							return (
 								<PlayerCardRenderer
 									key={card.instanceId}
@@ -291,7 +311,11 @@ export function GameBoard({
 							<button
 								type="button"
 								className="primary-button"
-								disabled={actionsResolving || state.pendingDiscard!.selectedCardInstanceIds.length !== state.pendingDiscard!.requiredCount}
+								disabled={
+									actionsResolving
+									|| state.pendingDiscard!.selectedCardInstanceIds.length !== state.pendingDiscard!.requiredCount
+									|| !actionAllowed({ type: 'CONFIRM_DISCARD', playerId: localPlayerId })
+								}
 								onClick={() => onAction({ type: 'CONFIRM_DISCARD', playerId: localPlayerId })}
 							>
 								Confirm discard
@@ -301,8 +325,8 @@ export function GameBoard({
 						<button
 							type="button"
 							className="end-turn-button"
-							disabled={!isLocalTurn || state.phase !== 'action'}
-							title={!isLocalTurn ? 'Wait for your turn.' : 'Draw one card and end your turn.'}
+							disabled={!isLocalTurn || state.phase !== 'action' || !actionAllowed({ type: 'SKIP_TURN', playerId: localPlayerId })}
+							title={!isLocalTurn ? 'Wait for your turn.' : !actionAllowed({ type: 'SKIP_TURN', playerId: localPlayerId }) ? 'Follow the current training instruction.' : 'Draw one card and end your turn.'}
 							onClick={() => onAction({ type: 'SKIP_TURN', playerId: localPlayerId })}
 						>
 							End turn

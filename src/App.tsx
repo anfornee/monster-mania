@@ -7,6 +7,8 @@ import { SoundToggle } from './components/SoundToggle'
 import { GameBootScreen } from './components/game/GameBootScreen'
 import { GameBoard } from './components/game/GameBoard'
 import { OnlineLobby } from './components/game/OnlineLobby'
+import { TutorialSession } from './components/tutorials/TutorialSession'
+import { TutorialsPage } from './components/tutorials/TutorialsPage'
 import { RulesSandbox } from './dev/RulesSandbox'
 import { chooseComputerAction } from './game/ai/computerStrategy'
 import { AudioProvider } from './game/audio/AudioProvider'
@@ -45,6 +47,13 @@ import {
 	serializeGame,
 } from './game/serialization/gameStorage'
 import { SettingsProvider } from './game/settings/SettingsProvider'
+import {
+	completeTutorialMode,
+	loadTutorialProgress,
+	saveTutorialProgress,
+} from './game/tutorials/tutorialProgress'
+import { TUTORIAL_MODES } from './game/tutorials/tutorialCatalog'
+import type { TutorialModeId } from './game/tutorials/types'
 
 type AppScreen = 'home' | 'setup' | 'solo' | 'online'
 
@@ -82,12 +91,13 @@ function loadSavedSoloGame(playerName: string): GameState | null {
 	}
 }
 
-function HomeScreen({ hasSavedGame, onPlaySolo, onResume, onOpenOnline, onOpenGallery }: {
+function HomeScreen({ hasSavedGame, onPlaySolo, onResume, onOpenOnline, onOpenGallery, onOpenTutorials }: {
 	hasSavedGame: boolean
 	onPlaySolo: () => void
 	onResume: () => void
 	onOpenOnline: () => void
 	onOpenGallery: () => void
+	onOpenTutorials: () => void
 }) {
 	return (
 		<main className="home-screen">
@@ -96,11 +106,14 @@ function HomeScreen({ hasSavedGame, onPlaySolo, onResume, onOpenOnline, onOpenGa
 				<img src={GAME_ASSET_PATHS.logo} alt="Monster Mania" />
 				<div className="home-nav-links">
 					<SettingsControl />
+					<a href="/tutorials" onClick={(event) => {
+						event.preventDefault()
+						onOpenTutorials()
+					}}>Tutorials</a>
 					<a href="/cards" onClick={(event) => {
 						event.preventDefault()
 						onOpenGallery()
 					}}>Card gallery</a>
-					<a href="/dev/rules">Rules &amp; Sandbox</a>
 				</div>
 			</nav>
 			<section className="tavern-hero" aria-labelledby="home-title">
@@ -180,6 +193,7 @@ function GameApplication() {
 	const [game, setGame] = useState<GameState | null>(null)
 	const [playerName, setPlayerName] = useState(() => loadPlayerName(localStorage))
 	const [savedGame, setSavedGame] = useState<GameState | null>(() => loadSavedSoloGame(playerName))
+	const [tutorialProgress, setTutorialProgress] = useState(() => loadTutorialProgress(window.localStorage))
 	const [error, setError] = useState<string | null>(null)
 	const [handoffLocked, setHandoffLocked] = useState(false)
 	const [pendingPresentation, setPendingPresentation] = useState<{
@@ -213,6 +227,25 @@ function GameApplication() {
 		audio.prepareMenuMusicForUserGesture()
 		setScreen('home')
 	}, [audio])
+
+	const returnToMenuRoute = useCallback(() => {
+		audio.prepareMenuMusicForUserGesture()
+		setScreen('home')
+		navigate('/')
+	}, [audio, navigate])
+
+	const returnToTutorials = useCallback(() => {
+		audio.prepareMenuMusicForUserGesture()
+		navigate('/tutorials')
+	}, [audio, navigate])
+
+	const recordTutorialCompletion = useCallback((modeId: TutorialModeId) => {
+		setTutorialProgress((current) => {
+			const next = completeTutorialMode(current, modeId)
+			saveTutorialProgress(window.localStorage, next)
+			return next
+		})
+	}, [])
 
 	const openSoloSetup = useCallback(() => {
 		setScreen('setup')
@@ -320,6 +353,24 @@ function GameApplication() {
 	}, [beginAcceptedTransition, game, pendingPresentation])
 
 	if (pathname === '/dev/rules') return <RulesSandbox />
+	if (pathname === '/tutorials') return (
+		<TutorialsPage
+			progress={tutorialProgress}
+			onBack={returnToMenuRoute}
+			onStartTutorial={(_modeId, entryPoint) => navigate(entryPoint)}
+		/>
+	)
+	const activeTutorialMode = TUTORIAL_MODES.find(
+		(mode) => mode.availability === 'available' && mode.tutorialEntryPoint === pathname,
+	)
+	if (activeTutorialMode) return (
+		<TutorialSession
+			modeId={activeTutorialMode.id}
+			playerName={playerName}
+			onExit={returnToTutorials}
+			onComplete={recordTutorialCompletion}
+		/>
+	)
 	if (pathname === '/cards') return (
 		<CardGallery catalog={CORE_CATALOG} onBack={() => navigate('/')} />
 	)
@@ -400,7 +451,7 @@ function GameApplication() {
 			setGame(resumableGame)
 			setScreen('solo')
 		}
-	}} onOpenOnline={() => setScreen('online')} onOpenGallery={() => navigate('/cards')} />
+	}} onOpenOnline={() => setScreen('online')} onOpenGallery={() => navigate('/cards')} onOpenTutorials={() => navigate('/tutorials')} />
 }
 
 const APP_ASSET_STYLES = {

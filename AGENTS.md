@@ -24,6 +24,7 @@ If code and the rules source of truth disagree, do not silently choose one. Trea
 - `src/game/presentation/` — presentation-only timing, profile, and event-derived helpers; never authoritative rules.
 - `src/game/assets/` — authoritative visible-asset manifest, cache version, preload scheduler, and boot hook.
 - `src/game/audio/` — centralized audio manifest, playback manager, preference, game-event mapping, and React bridge.
+- `src/game/tutorials/` — mode-aware tutorial definitions, deterministic training scenarios, lesson configuration, and completion persistence.
 - `src/game/network/` — Online Table protocol, private player views, codes, shared authoritative gameplay logic, and the Firebase anonymous-auth/Firestore/Callable Functions client adapter. `functions/` owns trusted transactional initialization and commands. See `docs/08-firebase-online-lobby.md`.
 - `src/game/sandbox/` — deterministic scenario builders; legal presets must pass state validation.
 - `src/components/` and `src/App.tsx` — React presentation and action dispatch only.
@@ -51,6 +52,8 @@ npm run preview
 ```
 
 Run tests, lint, type checking, and a production build before handing off a meaningful change.
+
+Do not run interactive browser tests or browser automation. When a change needs browser verification, hand the user a concise, numbered list of user tests tailored to the affected behavior, including any required viewport, browser profile, emulator, or deployment setup and the expected result for each test. Clearly distinguish these unperformed user tests from automated checks that were run. Browser-only verification gates, including the live two-browser Online Table match, remain required before making the corresponding production-readiness claim; the user performs and reports those checks.
 
 ## Engineering rules
 

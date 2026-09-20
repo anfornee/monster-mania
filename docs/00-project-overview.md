@@ -163,13 +163,19 @@ The available MVP art under `public/assets/cards/` is primarily flattened, compl
 
 This is a real limitation: the app cannot independently update embedded card names, rules text, frame details, point medallions, or requirement icons inside those JPGs. Use the complete cards for the MVP. A later asset pass can export separate frames, artwork, icons, and typography for fully data-driven card composition; do not claim that layered rendering is already available.
 
-## 9. Rules Sandbox
+## 9. Tutorials
+
+`/tutorials` is the permanent player-facing home for Hunter's Training. It uses the application's existing pathname navigation, remains replayable after completion, and keeps completion informational and independent for each stable gameplay-mode ID.
+
+Classic is the first available tutorial and runs at `/tutorials/classic` as a deterministic guided match through the shared engine and ordinary `GameAction`s. Its initial lesson sequence covers Action chaining, forced-discard selection and confirmation, normal Weapon requirements, and ending a turn when the player cannot or chooses not to defeat a Monster. Ending that turn draws the Black Hole Ultimate Weapon, which supplies the tutorial's final lesson. Ritual and Chaos remain unavailable catalog entries until their rules are designed; their tutorial entries must not invent gameplay or launch incomplete sessions. The Tutorials hub remains in the menu audio scene, while an active guided match uses the centralized gameplay audio lifecycle.
+
+## 10. Rules Sandbox
 
 `/dev/rules` is the permanent development utility for deterministic edge cases. Its legal presets are built through testable helpers and pass `validateGameState()`. See `05-rules-sandbox-and-state-validation.md` for the preset and validation contract.
 
 The sandbox is development tooling, not a second rules implementation.
 
-## 10. Accessibility and presentation
+## 11. Accessibility and presentation
 
 The board must provide keyboard-operable semantic controls, visible focus, useful labels, non-color interaction states, appropriate status announcements, readable contrast, dialog focus management, and reduced-motion behavior. Online connection/waiting errors and unavailable actions should be explained in text.
 
@@ -177,7 +183,7 @@ Desktop remains the first presentation target, with responsive safety rather tha
 
 The Solo board uses controller-neutral player seats around a shared table. Card inspection, paced one-action computer decisions, and event announcements are presentation concerns layered on top of immediate deterministic state transitions. See `06-tabletop-ux-and-presentation.md`.
 
-## 11. Development principles
+## 12. Development principles
 
 - Prefer pure rules functions, explicit transitions, stable IDs, and small focused modules.
 - Keep definitions, rules, selectors, AI, persistence, networking, and React presentation separate.

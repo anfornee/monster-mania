@@ -50,6 +50,8 @@ For crossfade loops, the alternate player is loaded when the scene starts. The m
 
 Audio remains presentation-only. It never changes `GameState`, affects legal actions, or adds audio rules to the engine.
 
+The Tutorials hub is a menu-level route and keeps the Tavern menu scene active. Entering the Classic guided match mounts the normal game board and selects gameplay audio through `useGameAudio`. Exiting or completing the training board returns to menu music through the same centralized scene lifecycle; tutorial components do not create or own audio players.
+
 ## Settings persistence and browser lifecycle
 
 Application settings are owned by `SettingsProvider`, consumed by the audio system, and persisted as a versioned object under `monster-mania:settings:v1`. Version 1 stores master mute plus relative `music`, `ambience`, and `sfx` values. Sound defaults on and each bus defaults to `1` (100% of the authored manifest level). Storage parsing validates the version, types, finiteness, and range; malformed or unsupported values fall back safely.

@@ -61,3 +61,9 @@ The current cards remain flattened, complete-card JPGs. Inspection improves thei
 ## Test strategy
 
 Pure tests cover name normalization/storage, resumability, pacing constants, and announcement selection. Server-rendered component tests verify opponent privacy, playable versus inspect-only labels, and match-result destinations. Engine simulation remains responsible for full deterministic match correctness; visual verification should use the browser at representative desktop and narrow widths rather than pixel snapshots.
+
+## Hunter's Training
+
+The player-facing Tutorials hub lives at `/tutorials` and is a menu-level destination alongside the card gallery. Selecting Classic reveals a separate Start Tutorial action before entering the guided match. Ritual and Chaos remain descriptive Coming Soon entries with no interactive launch control until their rules exist.
+
+Classic training reuses `GameBoard`, the core catalog, and normal `GameAction` validation. Its lesson configuration determines which otherwise-legal action is available at each step; it does not introduce tutorial-only rules into the engine. The deterministic sequence covers Action chaining, selecting and confirming a forced discard, defeating a Monster with matching Weapons, and ending a turn without a defeat. That end-turn draw delivers Black Hole for the final lesson. Leaving or completing training returns naturally to the Tutorials hub, and replay starts the deterministic scenario from its first lesson.
