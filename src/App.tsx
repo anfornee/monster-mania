@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties } from 're
 import './App.css'
 import { CardGallery } from './components/cards/CardGallery'
 import { AppUpdateNotice } from './components/AppUpdateNotice'
+import { SettingsControl } from './components/SettingsControl'
 import { SoundToggle } from './components/SoundToggle'
 import { GameBootScreen } from './components/game/GameBootScreen'
 import { GameBoard } from './components/game/GameBoard'
@@ -43,6 +44,7 @@ import {
 	restoreGame,
 	serializeGame,
 } from './game/serialization/gameStorage'
+import { SettingsProvider } from './game/settings/SettingsProvider'
 
 type AppScreen = 'home' | 'setup' | 'solo' | 'online'
 
@@ -93,6 +95,7 @@ function HomeScreen({ hasSavedGame, onPlaySolo, onResume, onOpenOnline, onOpenGa
 			<nav className="home-nav" aria-label="Primary navigation">
 				<img src={GAME_ASSET_PATHS.logo} alt="Monster Mania" />
 				<div className="home-nav-links">
+					<SettingsControl />
 					<a href="/cards" onClick={(event) => {
 						event.preventDefault()
 						onOpenGallery()
@@ -363,11 +366,14 @@ function GameApplication() {
 						returnToMenu()
 					}}>← Tavern</button>
 					<img src={GAME_ASSET_PATHS.logo} alt="Monster Mania" />
-					<button type="button" onClick={() => {
-						setPendingPresentation(null)
-						aiTurnKey.current = null
-						openSoloSetup()
-					}}>New game</button>
+					<div className="game-topbar-actions">
+						<button type="button" onClick={() => {
+							setPendingPresentation(null)
+							aiTurnKey.current = null
+							openSoloSetup()
+						}}>New game</button>
+						<SettingsControl />
+					</div>
 				</nav>
 				{error ? <div className="error-banner" role="alert">{error}</div> : null}
 				<GameBoard
@@ -479,11 +485,13 @@ function App() {
 	return (
 		<div className={`app-runtime${contentVisible ? ' content-visible' : ''}`} style={APP_ASSET_STYLES}>
 			{contentVisible ? (
-				<AudioProvider>
-					<GameApplication />
-					<AppUpdateNotice />
-					<SoundToggle />
-				</AudioProvider>
+				<SettingsProvider>
+					<AudioProvider>
+						<GameApplication />
+						<AppUpdateNotice />
+						<SoundToggle />
+					</AudioProvider>
+				</SettingsProvider>
 			) : null}
 			{bootPhase !== 'done' ? (
 				<GameBootScreen

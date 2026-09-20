@@ -3,8 +3,6 @@ import type { AudioManager } from './AudioManager'
 
 export interface AudioContextValue {
 	manager: AudioManager
-	enabled: boolean
-	setEnabled: (enabled: boolean) => void
 }
 
 export const AudioContext = createContext<AudioContextValue | null>(null)

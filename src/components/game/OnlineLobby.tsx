@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { SettingsControl } from '../SettingsControl'
 import type { GameAction, GameState } from '../../game/engine/types'
 import { subscribeToAppForeground } from '../../game/network/firebase/appLifecycle'
 import {
@@ -186,9 +187,12 @@ function OnlineMatch({
 			<nav className="game-topbar" aria-label="Match navigation">
 				<button type="button" className="back-button" onClick={onBack}>&larr; Tavern</button>
 				<strong>Online Table &middot; {session.table.joinCode}</strong>
-				<button type="button" onClick={() => void leaveTable()} disabled={leavePending}>
-					{leavePending ? 'Leaving…' : 'Leave Table'}
-				</button>
+				<div className="game-topbar-actions">
+					<button type="button" onClick={() => void leaveTable()} disabled={leavePending}>
+						{leavePending ? 'Leaving…' : 'Leave Table'}
+					</button>
+					<SettingsControl />
+				</div>
 			</nav>
 			{pending ? <div className="online-request-status" role="status">Waiting for the Table&hellip;</div> : null}
 			{error ? <div className="error-banner" role="alert">{error}</div> : null}

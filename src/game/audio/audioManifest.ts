@@ -33,6 +33,7 @@ export const DEFAULT_AUDIO_BUS_VOLUMES: AudioBusVolumes = {
 }
 export const AUDIO_TRANSITION_MS = 1_200
 export const AUDIO_MUTE_FADE_MS = 320
+export const AUDIO_VOLUME_RAMP_MS = 120
 
 export const AUDIO_MANIFEST = {
 	menu: {

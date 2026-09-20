@@ -4,6 +4,7 @@ import {
 	AUDIO_MANIFEST,
 	AUDIO_MUTE_FADE_MS,
 	AUDIO_TRANSITION_MS,
+	AUDIO_VOLUME_RAMP_MS,
 	CARD_SOUND_IDS,
 	DEFAULT_AUDIO_BUS_VOLUMES,
 	TAVERN_MUSIC_IDS,
@@ -29,14 +30,18 @@ export interface AudioScheduler {
 
 interface AudioManagerOptions {
 	enabled?: boolean
+	busVolumes?: AudioBusVolumes
 	random?: () => number
 	scheduler?: AudioScheduler
+	now?: () => number
 }
 
 interface LongFormVoice {
 	sound: AudioSound
 	id: number
 	slot: 0 | 1
+	fadeTargetScale: number
+	lifecycleFadeEndsAt: number
 }
 
 interface PrimedSceneVoice {
@@ -64,6 +69,7 @@ export class AudioManager {
 	private readonly backend: AudioPlaybackBackend
 	private readonly random: () => number
 	private readonly scheduler: AudioScheduler
+	private readonly now: () => number
 	private readonly sfxSounds = new Map<SfxTrackId, AudioSound>()
 	private readonly longFormSounds = new Map<string, AudioSound>()
 	private readonly eventCursor = new GameEventAudioCursor()
@@ -85,8 +91,14 @@ export class AudioManager {
 	constructor(backend: AudioPlaybackBackend, options: AudioManagerOptions = {}) {
 		this.backend = backend
 		this.enabled = options.enabled ?? true
+		for (const bus of Object.keys(this.busVolumes) as AudioBus[]) {
+			this.busVolumes[bus] = clampAudioBusVolume(
+				options.busVolumes?.[bus] ?? DEFAULT_AUDIO_BUS_VOLUMES[bus],
+			)
+		}
 		this.random = options.random ?? Math.random
 		this.scheduler = options.scheduler ?? defaultScheduler
+		this.now = options.now ?? Date.now
 	}
 
 	isEnabled(): boolean {
@@ -99,12 +111,14 @@ export class AudioManager {
 
 	setBusVolume(bus: AudioBus, volume: number): void {
 		this.busVolumes[bus] = clampAudioBusVolume(volume)
-		for (const [trackId, sound] of this.sfxSounds) {
-			sound.volume(this.trackVolume(AUDIO_MANIFEST[trackId]))
+		if (bus === 'sfx') {
+			for (const [trackId, sound] of this.sfxSounds) {
+				sound.volume(this.trackVolume(AUDIO_MANIFEST[trackId]))
+			}
 		}
 		for (const active of [this.active, this.activeTavernMusic]) {
 			if (!active || active.track.bus !== bus) continue
-			active.current.sound.volume(this.trackVolume(active.track), active.current.id)
+			for (const voice of active.voices) this.retargetVoiceForBus(active.track, voice)
 		}
 	}
 
@@ -116,7 +130,6 @@ export class AudioManager {
 	}
 
 	unlock(): void {
-		if (!this.enabled) return
 		if (!this.unlocked) this.unlocked = true
 		if (!this.visible) return
 		this.backend.resume()
@@ -128,11 +141,16 @@ export class AudioManager {
 		this.enabled = enabled
 		if (!enabled) {
 			this.stopAllSfx()
-			this.stopAllLongForm(AUDIO_MUTE_FADE_MS)
+			this.fadeActiveMix(AUDIO_MUTE_FADE_MS)
 			return
 		}
 		this.prepareCriticalSfx()
-		if (this.unlocked) this.startDesiredScene()
+		if (!this.unlocked || !this.visible) return
+		if (this.active?.scene === this.desiredScene) {
+			this.fadeActiveMix(AUDIO_MUTE_FADE_MS)
+			return
+		}
+		if (!this.transitionTimer) this.startDesiredScene()
 	}
 
 	private setScene(scene: AudioScene): void {
@@ -140,7 +158,7 @@ export class AudioManager {
 		this.desiredScene = scene
 		if (this.primedSceneVoice?.scene !== scene) this.stopPrimedSceneVoice()
 		if (changed) this.completedScene = null
-		if (!this.enabled || !this.unlocked) return
+		if (!this.unlocked) return
 		if (!this.visible || this.active?.scene === scene || this.completedScene === scene) return
 		this.beginSceneTransition()
 	}
@@ -151,7 +169,7 @@ export class AudioManager {
 
 	prepareMenuMusicForUserGesture(): void {
 		this.setScene('menu')
-		if (!this.canPlay()) return
+		if (!this.canRunLongForm()) return
 		if (this.active?.scene === 'menu') {
 			if (!this.active.current.sound.playing(this.active.current.id)) {
 				this.active.current.sound.play(this.active.current.id)
@@ -201,7 +219,7 @@ export class AudioManager {
 	}
 
 	playCardSound(): void {
-		if (!this.canPlay()) return
+		if (!this.canPlaySfx()) return
 		const choices = CARD_SOUND_IDS.filter((id) => id !== this.lastCardSound)
 		const index = Math.min(choices.length - 1, Math.floor(this.random() * choices.length))
 		const selected = choices[Math.max(0, index)]
@@ -234,7 +252,7 @@ export class AudioManager {
 			}
 			return
 		}
-		if (!this.enabled || !this.unlocked) return
+		if (!this.unlocked) return
 		this.backend.resume()
 		if (this.active?.scene !== this.desiredScene) {
 			this.stopActiveLongForm(0)
@@ -244,12 +262,7 @@ export class AudioManager {
 		for (const active of [this.active, this.activeTavernMusic]) {
 			if (!active) continue
 			for (const voice of active.voices) voice.sound.play(voice.id)
-			active.current.sound.fade(
-				active.current.sound.getVolume(active.current.id),
-				this.trackVolume(active.track),
-				AUDIO_MUTE_FADE_MS,
-				active.current.id,
-			)
+			this.fadeVoice(active.track, active.current, 1, AUDIO_MUTE_FADE_MS)
 			if (active.track.loopMode === 'crossfade') this.scheduleCrossfade(active, active.current)
 		}
 	}
@@ -268,7 +281,11 @@ export class AudioManager {
 		this.unlocked = false
 	}
 
-	private canPlay(): boolean {
+	private canRunLongForm(): boolean {
+		return this.unlocked && this.visible
+	}
+
+	private canPlaySfx(): boolean {
 		return this.enabled && this.unlocked && this.visible
 	}
 
@@ -292,7 +309,7 @@ export class AudioManager {
 	}
 
 	private startDesiredScene(): void {
-		if (!this.canPlay() || this.transitionTimer) return
+		if (!this.canRunLongForm() || this.transitionTimer) return
 		if (this.active?.scene === this.desiredScene || this.completedScene === this.desiredScene) return
 		this.startScene(this.desiredScene)
 	}
@@ -351,7 +368,7 @@ export class AudioManager {
 		if (
 			this.generation !== generation
 			|| this.desiredScene !== 'ambience'
-			|| !this.canPlay()
+			|| !this.canRunLongForm()
 		) return
 		const trackId = TAVERN_MUSIC_IDS[this.tavernMusicIndex]
 		this.tavernMusicIndex = (this.tavernMusicIndex + 1) % TAVERN_MUSIC_IDS.length
@@ -381,7 +398,13 @@ export class AudioManager {
 		sound.volume(0)
 		const id = sound.play()
 		sound.volume(0, id)
-		return { sound, id, slot }
+		return {
+			sound,
+			id,
+			slot,
+			fadeTargetScale: 0,
+			lifecycleFadeEndsAt: 0,
+		}
 	}
 
 	private fadeInVoiceWhenPlaying(
@@ -394,9 +417,12 @@ export class AudioManager {
 		const start = () => {
 			if (handled || !this.isActive(active)) return
 			handled = true
-			const targetVolume = this.trackVolume(active.track)
-			if (fadeMs > 0) voice.sound.fade(0, targetVolume, fadeMs, voice.id)
-			else voice.sound.volume(targetVolume, voice.id)
+			if (fadeMs > 0) this.fadeVoice(active.track, voice, 1, fadeMs)
+			else {
+				voice.fadeTargetScale = 1
+				voice.lifecycleFadeEndsAt = 0
+				voice.sound.volume(this.trackVolume(active.track), voice.id)
+			}
 			onStarted()
 		}
 		if (voice.sound.playing(voice.id)) start()
@@ -466,7 +492,7 @@ export class AudioManager {
 			if (active.current !== previous || active.pending !== next) return
 			active.pending = null
 			active.current = next
-			previous.sound.fade(previous.sound.getVolume(previous.id), 0, fadeMs, previous.id)
+			this.fadeVoice(active.track, previous, 0, fadeMs)
 			this.scheduler.setTimeout(() => {
 				previous.sound.stop(previous.id)
 				active.voices.delete(previous)
@@ -482,14 +508,6 @@ export class AudioManager {
 		this.active = null
 		this.activeTavernMusic = null
 		for (const active of activeTracks) this.stopLongForm(active, fadeMs)
-	}
-
-	private stopAllLongForm(fadeMs: number): void {
-		this.cancelPendingTransition()
-		this.stopPrimedSceneVoice()
-		this.generation += 1
-		this.completedScene = null
-		this.stopActiveLongForm(fadeMs)
 	}
 
 	private cancelPendingTransition(): void {
@@ -511,8 +529,56 @@ export class AudioManager {
 			active.loopTimer = null
 		}
 		for (const voice of active.voices) {
-			voice.sound.fade(voice.sound.getVolume(voice.id), 0, fadeMs, voice.id)
+			this.fadeVoice(active.track, voice, 0, fadeMs)
 		}
+	}
+
+	private fadeActiveMix(durationMs: number): void {
+		for (const active of [this.active, this.activeTavernMusic]) {
+			if (!active) continue
+			for (const voice of active.voices) {
+				voice.sound.fade(
+					voice.sound.getVolume(voice.id),
+					this.trackVolume(active.track) * voice.fadeTargetScale,
+					durationMs,
+					voice.id,
+				)
+			}
+		}
+	}
+
+	private fadeVoice(
+		track: AudioTrackDefinition,
+		voice: LongFormVoice,
+		targetScale: number,
+		durationMs: number,
+	): void {
+		voice.fadeTargetScale = targetScale
+		voice.lifecycleFadeEndsAt = this.now() + durationMs
+		voice.sound.fade(
+			voice.sound.getVolume(voice.id),
+			this.trackVolume(track) * targetScale,
+			durationMs,
+			voice.id,
+		)
+	}
+
+	private retargetVoiceForBus(track: AudioTrackDefinition, voice: LongFormVoice): void {
+		const targetVolume = this.trackVolume(track) * voice.fadeTargetScale
+		if (!voice.sound.playing(voice.id)) {
+			// HTML5 native-loop voices can briefly report false while recovering
+			// from autoplay lock. Apply the current target directly so the queued
+			// menu voice cannot retain its previous user volume when it resumes.
+			voice.sound.volume(targetVolume, voice.id)
+			return
+		}
+		const remainingLifecycleMs = Math.max(0, voice.lifecycleFadeEndsAt - this.now())
+		voice.sound.fade(
+			voice.sound.getVolume(voice.id),
+			targetVolume,
+			remainingLifecycleMs > 0 ? remainingLifecycleMs : AUDIO_VOLUME_RAMP_MS,
+			voice.id,
+		)
 	}
 
 	private stopLongFormNow(active: ActiveLongForm): void {
@@ -537,7 +603,7 @@ export class AudioManager {
 	}
 
 	private playSfx(trackId: SfxTrackId): void {
-		if (!this.canPlay()) return
+		if (!this.canPlaySfx()) return
 		this.getSfxSound(trackId).play()
 	}
 
@@ -565,6 +631,6 @@ export class AudioManager {
 	}
 
 	private trackVolume(track: AudioTrackDefinition): number {
-		return getTrackVolume(track, this.busVolumes)
+		return this.enabled ? getTrackVolume(track, this.busVolumes) : 0
 	}
 }

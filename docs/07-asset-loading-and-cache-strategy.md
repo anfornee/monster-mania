@@ -72,7 +72,7 @@ Firebase Hosting serves `sw.js` and `manifest.json` with `Cache-Control: no-cach
 
 The visible percentage updates with actual completed asset attempts. A separate polite status announces only milestone phrases rather than every percentage. Critical failures use an alert and keyboard-operable Retry button.
 
-The logo breathes using only transform and opacity. The global `prefers-reduced-motion: reduce` rule collapses the pulse, progress transition, boot fade, and menu reveal to effectively instant behavior. Audio fades are not motion and remain enabled; the persistent sound control can silence all buses.
+The logo breathes using only transform and opacity. The global `prefers-reduced-motion: reduce` rule collapses the pulse, progress transition, boot fade, and menu reveal to effectively instant behavior. Audio fades are not motion and remain enabled; top-bar Settings exposes independent music, ambience, and SFX levels from menu and match screens, while the fixed speaker remains the quick master-mute control.
 
 ## Testing
 

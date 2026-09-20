@@ -7,7 +7,8 @@
 All sound is routed through the shared `AudioManager`. Components may select a scene or report authoritative game state, but they must not construct `Audio`, `Howl`, or browser audio nodes directly.
 
 ```text
-AudioProvider (preference, initial playback attempt, gesture fallback, visibility)
+SettingsProvider (versioned application preferences)
+    -> AudioProvider (initial playback attempt, gesture fallback, visibility)
     -> AudioManager (scene transitions, event dedupe, fades, variants)
         -> music / ambience / SFX buses
             -> Howler playback backend
@@ -31,7 +32,7 @@ AudioProvider (preference, initial playback attempt, gesture fallback, visibilit
 | Card interaction | `card-1.mp3` through `card-4.mp3` | Random variant without an immediate repeat |
 | Initial or recycled deck shuffle | `shuffle-cards.mp3` | One cue per authoritative shuffle event batch |
 
-Scene changes use a queued 1.2-second handoff: every outgoing long-form layer fades completely and stops before the latest requested scene begins fading in. Rapid scene requests collapse to the most recent intent, so navigation cannot leave competing menu and gameplay tracks alive. Normal gameplay runs the tavern music playlist and tavern ambience together; entering Sudden Death or a game result fades out both before the dedicated music takes over. Disabling sound immediately stops SFX and fades long-form audio over 0.32 seconds; enabling it resumes the scene that the application currently wants.
+Scene changes use a queued 1.2-second handoff: every outgoing long-form layer fades completely and stops before the latest requested scene begins fading in. Rapid scene requests collapse to the most recent intent, so navigation cannot leave competing menu and gameplay tracks alive. Normal gameplay runs the tavern music playlist and tavern ambience together; entering Sudden Death or a game result fades out both before the dedicated music takes over. Master mute suppresses new SFX and fades long-form output to zero over 0.32 seconds without stopping its transport. Long tracks and silent scene changes continue underneath the mute, so unmuting ramps the current scene back to its saved bus levels without reloading or restarting it.
 
 Return-to-Tavern controls prime the menu source at zero volume inside the initiating user gesture. This preserves mobile browser playback permission while the gameplay layers finish their fade; the prepared menu voice becomes audible only after the handoff completes.
 
@@ -49,9 +50,13 @@ For crossfade loops, the alternate player is loaded when the scene starts. The m
 
 Audio remains presentation-only. It never changes `GameState`, affects legal actions, or adds audio rules to the engine.
 
-## Preference and browser lifecycle
+## Settings persistence and browser lifecycle
 
-Sound defaults on. The fixed sound button exposes its state with `aria-pressed` and persists it under `monster-mania:audio-enabled:v1`. The preference is restored before any playback attempt.
+Application settings are owned by `SettingsProvider`, consumed by the audio system, and persisted as a versioned object under `monster-mania:settings:v1`. Version 1 stores master mute plus relative `music`, `ambience`, and `sfx` values. Sound defaults on and each bus defaults to `1` (100% of the authored manifest level). Storage parsing validates the version, types, finiteness, and range; malformed or unsupported values fall back safely.
+
+The top-bar gear opens the same Settings panel from the menu, Solo play, and Online Table flow. The fixed speaker remains the quick master-mute control, and both surfaces update the same master-mute value. Muting never overwrites bus values or stops long-form playback, so unmuting restores the previous mix at its current playback position. On the first load after upgrading, a legacy `monster-mania:audio-enabled:v1` value of `false` is translated to master mute. Once versioned settings exist, they are authoritative.
+
+Slider presentation updates immediately while pointer and keyboard changes are coalesced over a short 100 ms window before updating application audio state. Browser storage writes are separately debounced by 250 ms and flushed on `pagehide`; persistence is never the trigger for live playback changes.
 
 `AudioProvider` attempts to start the menu scene as soon as the boot screen hands off to the application. Browsers may still block audible playback until a real pointer or keyboard gesture; the provider listens for that first gesture and resumes Howler without bypassing the browser policy. Playback errors may retry after Howler's unlock event only while the same sound is still active and not visibility-paused.
 
@@ -59,7 +64,13 @@ The provider owns one document `visibilitychange` listener. Hiding the document 
 
 ## Bus volumes
 
-Every manifest entry belongs to `music`, `ambience`, or `sfx`. `AudioManager` holds a relative value for each bus, currently initialized to `1` (100%), and exposes typed getters/setters for a later Settings screen. Effective output is `manifest volume × clamped bus volume`; a bus value is always clamped to `0...1`, so user preference can never amplify an asset above its authored manifest ceiling. Existing and future sounds both pick up the current bus value.
+Every manifest entry belongs to `music`, `ambience`, or `sfx`. `AudioManager` receives the persisted relative value for each bus and exposes typed getters/setters for live updates. Effective output is `manifest volume × clamped bus volume`; a bus value is always clamped to `0...1`, so user preference can never amplify an asset above its authored manifest ceiling. Existing and future sounds both pick up the current bus value. Active long-form tracks ramp briefly to a changed value without restarting, while SFX volume updates apply to the shared players immediately.
+
+Lifecycle fades and user mix changes share a playback voice but not a timing policy. Each voice records its current fade envelope and deadline. If a bus changes during a menu/game handoff or loop crossfade, the manager retargets that existing envelope to the new effective volume for its remaining duration instead of starting a competing fade. A newly started voice consults the current bus value before its first audible fade, including when that bus is at zero.
+
+The menu's native HTML5 loop may briefly report a non-playing state while recovering from browser autoplay lock. Bus changes still write its current target volume during that interval, ensuring the recovered menu voice cannot resume at a stale Music level.
+
+Bus ownership is semantic: menu, gameplay, Sudden Death, victory, and loss tracks use `music`; environmental and crowd beds use `ambience`; card, shuffle, Monster-defeat, and other short gameplay cues use `sfx`. Do not duplicate user volume in manifest entries or UI code.
 
 ## Loading and caching
 
@@ -72,9 +83,9 @@ When replacing an audio file at the same public path, bump `GAME_ASSET_VERSION` 
 ## Extending or tuning audio
 
 1. Add the file under `public/assets/audio/`.
-2. Add one typed entry to `AUDIO_MANIFEST`, including its bus, preload tier, loop mode, and relative volume.
+2. Add one typed entry to `AUDIO_MANIFEST`, including its semantic bus, preload tier, loop mode, and authored maximum volume.
 3. If it represents a new semantic cue, add the typed ID and one manager method or event mapping. Keep components free of file paths.
 4. Add or update unit tests for disabled playback, transitions, event dedupe, or variant behavior.
 5. Bump `GAME_ASSET_VERSION` when replacing an existing path, then build and verify the generated worker's audio route.
 
-Tune an individual authored maximum with its manifest `volume`. User-facing relative mix belongs in the manager's bus values and must remain within `0...1`. Crossfade lengths belong on the relevant manifest entries.
+Tune an individual authored maximum with its manifest `volume`. User-facing relative mix belongs in versioned application settings, flows through `AudioProvider` to the manager's bus values, and must remain within `0...1`. Components must never locate playback objects or multiply per-file levels themselves. Crossfade lengths belong on the relevant manifest entries.

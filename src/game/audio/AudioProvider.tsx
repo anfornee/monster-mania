@@ -1,24 +1,39 @@
 import {
-	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useState,
 	type ReactNode,
 } from 'react'
+import { useSettings } from '../settings/settingsContext'
+import { getAudioBusSettings } from '../settings/settingsStorage'
 import { AudioManager } from './AudioManager'
 import { AudioContext } from './audioContext'
-import { loadAudioEnabled, saveAudioEnabled } from './audioPreference'
 import { HowlerPlaybackBackend } from './audioPlayback'
 
 export function AudioProvider({ children }: { children: ReactNode }) {
-	const [enabled, setEnabledState] = useState(() => loadAudioEnabled(window.localStorage))
+	const { settings } = useSettings()
+	const { audio } = settings
+	const enabled = !audio.muted
 	const [manager] = useState(() => new AudioManager(
 		new HowlerPlaybackBackend(),
-		{ enabled },
+		{ enabled, busVolumes: getAudioBusSettings(settings) },
 	))
 
+	useLayoutEffect(() => {
+		manager.setBusVolume('music', audio.music)
+	}, [audio.music, manager])
+
+	useLayoutEffect(() => {
+		manager.setBusVolume('ambience', audio.ambience)
+	}, [audio.ambience, manager])
+
+	useLayoutEffect(() => {
+		manager.setBusVolume('sfx', audio.sfx)
+	}, [audio.sfx, manager])
+
 	useEffect(() => {
-		if (!enabled) return
-		manager.prepareCriticalSfx()
+		manager.setEnabled(enabled)
+		if (enabled) manager.prepareCriticalSfx()
 		manager.handleVisibilityChange(!document.hidden)
 		// Try the menu scene as soon as the boot screen hands off to the app.
 		// Browsers that require a gesture will reject this attempt; Howler keeps
@@ -45,15 +60,8 @@ export function AudioProvider({ children }: { children: ReactNode }) {
 
 	useEffect(() => () => manager.dispose(), [manager])
 
-	const setEnabled = useCallback((nextEnabled: boolean) => {
-		setEnabledState(nextEnabled)
-		saveAudioEnabled(window.localStorage, nextEnabled)
-		manager.setEnabled(nextEnabled)
-		if (nextEnabled) manager.unlock()
-	}, [manager])
-
 	return (
-		<AudioContext.Provider value={{ manager, enabled, setEnabled }}>
+		<AudioContext.Provider value={{ manager }}>
 			{children}
 		</AudioContext.Provider>
 	)

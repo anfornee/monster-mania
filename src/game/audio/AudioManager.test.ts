@@ -5,6 +5,7 @@ import {
 	AUDIO_MANIFEST,
 	AUDIO_MUTE_FADE_MS,
 	AUDIO_TRANSITION_MS,
+	AUDIO_VOLUME_RAMP_MS,
 	TAVERN_MUSIC_IDS,
 	getTrackVolume,
 	type AudioTrackDefinition,
@@ -17,9 +18,16 @@ class FakeSound implements AudioSound {
 	loadCount = 0
 	stopCount = 0
 	pauseCount = 0
+	readonly fadeCalls: Array<{ from: number; to: number; durationMs: number; id: number }> = []
+	reportPlaying = true
 	private nextId = 1
 	private readonly active = new Set<number>()
 	private readonly endListeners = new Map<number, Array<(id: number) => void>>()
+	private currentVolume: number
+
+	constructor(initialVolume = 1) {
+		this.currentVolume = initialVolume
+	}
 
 	play(existingId?: number): number {
 		if (existingId !== undefined) {
@@ -45,10 +53,14 @@ class FakeSound implements AudioSound {
 		else this.active.delete(id)
 	}
 
-	fade(): void {}
-	volume(): void {}
-	getVolume(): number { return 1 }
+	fade(from: number, to: number, durationMs: number, id: number): void {
+		this.fadeCalls.push({ from, to, durationMs, id })
+		this.currentVolume = to
+	}
+	volume(volume: number): void { this.currentVolume = volume }
+	getVolume(): number { return this.currentVolume }
 	playing(id?: number): boolean {
+		if (!this.reportPlaying) return false
 		return id === undefined ? this.active.size > 0 : this.active.has(id)
 	}
 	duration(): number { return 100 }
@@ -74,8 +86,8 @@ class FakeBackend implements AudioPlaybackBackend {
 	readonly sounds = new Map<string, FakeSound[]>()
 	resumeCount = 0
 
-	create(track: AudioTrackDefinition): AudioSound {
-		const sound = new FakeSound()
+	create(track: AudioTrackDefinition, initialVolume: number): AudioSound {
+		const sound = new FakeSound(initialVolume)
 		const sounds = this.sounds.get(track.id) ?? []
 		sounds.push(sound)
 		this.sounds.set(track.id, sounds)
@@ -140,15 +152,49 @@ function managerWith(backend: FakeBackend, enabled = true, random = () => 0): Au
 }
 
 describe('AudioManager', () => {
-	it('does not execute playback commands while disabled', () => {
+	it('keeps long-form audio running silently while suppressing muted SFX', () => {
 		const backend = new FakeBackend()
 		const manager = managerWith(backend, false)
 		manager.startGameAmbience()
 		manager.unlock()
 		manager.playCardSound()
 		manager.playShuffleSound()
-		expect(backend.playCount('ambience')).toBe(0)
+		expect(backend.playCount('ambience')).toBe(1)
+		expect(backend.sounds.get('ambience')?.[0].getVolume()).toBe(0)
 		expect(backend.playCount('shuffle')).toBe(0)
+	})
+
+	it('mutes and restores an active track without stopping or restarting it', () => {
+		const backend = new FakeBackend()
+		const manager = managerWith(backend)
+		manager.unlock()
+		const menu = backend.sounds.get('menu')?.[0]
+		expect(menu?.playCount).toBe(1)
+		manager.setEnabled(false)
+		expect(menu?.playing()).toBe(true)
+		expect(menu?.stopCount).toBe(0)
+		expect(menu?.getVolume()).toBe(0)
+		manager.setEnabled(true)
+		expect(menu?.playCount).toBe(1)
+		expect(menu?.getVolume()).toBe(AUDIO_MANIFEST.menu.volume)
+	})
+
+	it('advances scene changes silently while muted and unmutes the current scene', () => {
+		const backend = new FakeBackend()
+		const scheduler = new RecordingScheduler()
+		const manager = new AudioManager(backend, { enabled: false, scheduler })
+		manager.unlock()
+		manager.startGameAmbience()
+		scheduler.runFirst(AUDIO_TRANSITION_MS)
+		const ambience = backend.sounds.get('ambience')?.[0]
+		const music = backend.sounds.get('tavern-music-1')?.[0]
+		expect(ambience?.getVolume()).toBe(0)
+		expect(music?.getVolume()).toBe(0)
+		manager.setEnabled(true)
+		expect(backend.playCount('ambience')).toBe(1)
+		expect(backend.playCount('tavern-music-1')).toBe(1)
+		expect(ambience?.getVolume()).toBe(AUDIO_MANIFEST.ambience.volume)
+		expect(music?.getVolume()).toBe(AUDIO_MANIFEST['tavern-music-1'].volume)
 	})
 
 	it('restores the desired long-form scene after enabling and unlocking', () => {
@@ -377,6 +423,116 @@ describe('AudioManager', () => {
 		expect(getTrackVolume(track, { music: .5, ambience: 1, sfx: 1 })).toBe(track.volume * .5)
 		expect(getTrackVolume(track, { music: 2, ambience: 1, sfx: 1 })).toBe(track.volume)
 		expect(getTrackVolume(track, { music: Number.NaN, ambience: 1, sfx: 1 })).toBe(0)
+	})
+
+	it('stores independent clamped bus levels without losing them while muted', () => {
+		const manager = new AudioManager(new FakeBackend(), {
+			enabled: false,
+			busVolumes: { music: .6, ambience: .4, sfx: .9 },
+		})
+		expect(manager.getBusVolume('music')).toBe(.6)
+		expect(manager.getBusVolume('ambience')).toBe(.4)
+		expect(manager.getBusVolume('sfx')).toBe(.9)
+		manager.setBusVolume('music', 4)
+		expect(manager.getBusVolume('music')).toBe(1)
+		expect(manager.getBusVolume('ambience')).toBe(.4)
+		manager.setEnabled(true)
+		manager.setEnabled(false)
+		expect(manager.getBusVolume('sfx')).toBe(.9)
+	})
+
+	it('retargets an in-flight lifecycle fade without shortening it', () => {
+		const backend = new FakeBackend()
+		let now = 0
+		const manager = new AudioManager(backend, { scheduler: inertScheduler(), now: () => now })
+		manager.unlock()
+		const menu = backend.sounds.get('menu')?.[0]
+		expect(menu).toBeDefined()
+		const initialFadeCount = menu?.fadeCalls.length ?? 0
+		manager.setBusVolume('ambience', .2)
+		expect(menu?.fadeCalls).toHaveLength(initialFadeCount)
+		manager.setBusVolume('music', .4)
+		expect(menu?.playCount).toBe(1)
+		expect(menu?.fadeCalls.at(-1)).toMatchObject({
+			to: AUDIO_MANIFEST.menu.volume * .4,
+			durationMs: AUDIO_TRANSITION_MS,
+		})
+		now = AUDIO_TRANSITION_MS
+		manager.setBusVolume('music', .3)
+		expect(menu?.fadeCalls.at(-1)).toMatchObject({
+			to: AUDIO_MANIFEST.menu.volume * .3,
+			durationMs: AUDIO_VOLUME_RAMP_MS,
+		})
+	})
+
+	it('controls tavern crowd ambience and tavern music independently', () => {
+		const backend = new FakeBackend()
+		const scheduler = new RecordingScheduler()
+		let now = 0
+		const manager = new AudioManager(backend, { scheduler, now: () => now })
+		manager.unlock()
+		manager.startGameAmbience()
+		now = AUDIO_TRANSITION_MS
+		scheduler.runFirst(AUDIO_TRANSITION_MS)
+		now += AUDIO_TRANSITION_MS
+
+		const ambience = backend.sounds.get('ambience')?.[0]
+		const music = backend.sounds.get('tavern-music-1')?.[0]
+		expect(ambience).toBeDefined()
+		expect(music).toBeDefined()
+		const musicFadeCount = music?.fadeCalls.length ?? 0
+		manager.setBusVolume('ambience', .25)
+		expect(ambience?.fadeCalls.at(-1)).toMatchObject({
+			to: AUDIO_MANIFEST.ambience.volume * .25,
+		})
+		expect(music?.fadeCalls).toHaveLength(musicFadeCount)
+
+		const ambienceFadeCount = ambience?.fadeCalls.length ?? 0
+		manager.setBusVolume('music', .4)
+		expect(music?.fadeCalls.at(-1)).toMatchObject({
+			to: AUDIO_MANIFEST['tavern-music-1'].volume * .4,
+		})
+		expect(ambience?.fadeCalls).toHaveLength(ambienceFadeCount)
+	})
+
+	it('applies the current Music bus when returning to a primed menu voice', () => {
+		const backend = new FakeBackend()
+		const scheduler = new RecordingScheduler()
+		let now = 0
+		const manager = new AudioManager(backend, { scheduler, now: () => now })
+		manager.unlock()
+		now = AUDIO_TRANSITION_MS
+		manager.startGameAmbience()
+		now += AUDIO_TRANSITION_MS
+		scheduler.runFirst(AUDIO_TRANSITION_MS)
+		now += AUDIO_TRANSITION_MS
+		manager.prepareMenuMusicForUserGesture()
+		manager.setBusVolume('music', 0)
+		now += AUDIO_TRANSITION_MS
+		scheduler.runFirst(AUDIO_TRANSITION_MS)
+
+		const menu = backend.sounds.get('menu')?.[0]
+		expect(menu?.playCount).toBe(2)
+		expect(menu?.fadeCalls.at(-1)).toMatchObject({ to: 0 })
+
+		now += AUDIO_TRANSITION_MS
+		manager.setBusVolume('music', .4)
+		expect(menu?.fadeCalls.at(-1)).toMatchObject({
+			to: AUDIO_MANIFEST.menu.volume * .4,
+			durationMs: AUDIO_VOLUME_RAMP_MS,
+		})
+	})
+
+	it('updates a native-loop menu voice while Howler reports autoplay recovery', () => {
+		const backend = new FakeBackend()
+		const manager = managerWith(backend)
+		manager.unlock()
+		const menu = backend.sounds.get('menu')?.[0]
+		expect(menu).toBeDefined()
+		if (!menu) return
+		menu.reportPlaying = false
+		manager.setBusVolume('music', .25)
+		expect(menu.getVolume()).toBe(AUDIO_MANIFEST.menu.volume * .25)
 	})
 
 	it('keeps gameplay audio until the result presentation is visible', () => {
