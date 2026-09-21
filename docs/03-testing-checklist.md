@@ -1,6 +1,6 @@
 # Monster Mania — Rules Testing Checklist
 
-> **Purpose:** Required coverage for the shared rules engine, playable Solo Game, and future Online Table boundary. The same engine behavior applies to every controller type.
+> **Purpose:** Required coverage for the shared rules engine, Solo Game, Hunter's Training, and authoritative Online Table boundary. The same engine behavior applies to every controller type.
 
 ---
 
@@ -228,7 +228,7 @@ Always:
 
 ---
 
-## Online Table Skeleton
+## Online Table Contract and Authority
 
 - [ ] Product-facing copy consistently uses `Table`, not `Room`
 - [ ] Create, join, waiting, disconnected, and error states are representable
@@ -239,16 +239,16 @@ Always:
 - [ ] Only a Table member may read state or submit actions
 - [ ] A submitted action's player ID must match the authenticated seat
 - [ ] Only the current player may submit normal turn actions
-- [ ] Illegal actions are rejected by the in-memory authoritative service
+- [ ] Illegal actions are rejected by the provider-neutral authoritative service
 - [ ] Accepted actions are applied through the shared engine and validated before commit
-- [ ] Separate in-memory Tables never share state
+- [ ] Separate authoritative Tables never share state
 - [ ] Each serialized view omits every opponent-hand instance ID
 - [ ] The Table boundary accepts actions, never a client-authored `GameState`
 - [ ] Network contracts remain separate from React and the rules engine
-- [ ] The disconnected skeleton clearly says live online play is not configured
-- [ ] The UI does not imply that the in-memory service is deployed or cross-device
+- [ ] The UI distinguishes emulator verification from production readiness
+- [ ] The UI does not claim production readiness before the live two-browser completion gate passes
 
-The following checks belong to the later transport/persistence milestone and must pass before Online Table is described as playable:
+## Firebase Online Table and Completion Gate
 
 - [ ] Accepted actions synchronize both clients
 - [ ] Stale or simultaneous actions cannot both commit
@@ -261,8 +261,12 @@ The following checks belong to the later transport/persistence milestone and mus
 - [ ] Either participant can explicitly leave before or after a rematch request
 - [ ] Explicit leave deletes the code, Table, authority state, and both private views
 - [ ] The remaining participant observes closure and clears its stored session
-- [ ] Expired Tables and process restarts follow the documented persistence policy
 - [ ] Neither client payload contains the opponent's private hand
+- [ ] Emulator coverage completes a deterministic full match through trusted Callable Functions
+- [ ] Production Functions, Rules, indexes, and Hosting are deployed together
+- [ ] A live two-browser match covers Action chaining, forced discard, Black Hole, final three, and Sudden Death
+
+Disconnect presence, abandoned-Table expiration, App Check enforcement, rate limiting, structured abuse monitoring, and cross-device recovery remain deferred hardening. Add corresponding checks when those policies are implemented.
 
 ---
 
@@ -309,6 +313,10 @@ The following checks belong to the later transport/persistence milestone and mus
 - [ ] The end-turn draw delivers Black Hole for the final tutorial lesson
 - [ ] Classic finishes by demonstrating Black Hole against a regular Monster without spending normal requirement Weapons
 - [ ] Classic completion is stored independently and remains informational
+- [ ] Tutorial progress validates its schema version and stable mode IDs
+- [ ] Missing, malformed, or unsupported tutorial progress falls back safely
+- [ ] A tutorial progress write failure does not interrupt the current session
+- [ ] Lesson position and tutorial `GameState` are not persisted; re-entry starts the deterministic scenario again
 - [ ] A completed Classic tutorial can be replayed from the beginning
 - [ ] Exiting active training returns to Tutorials rather than forcing the Tavern menu
 - [ ] Tutorial completion offers clear Return to Tutorials and Replay Classic actions

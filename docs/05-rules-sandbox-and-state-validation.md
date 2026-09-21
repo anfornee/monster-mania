@@ -846,18 +846,18 @@ This becomes important when future expansions add or remove available definition
 
 ---
 
-# 23. Future Multiplayer Value
+# 23. Online Table Authority Value
 
-This work is intentionally useful beyond local development.
+This work protects both local development and the implemented authoritative Online Table path.
 
-When live Online Tables are added, the server can:
+For Online Table commands, the trusted service:
 
 1. Receive a `GameAction`
 2. Validate that the player may perform it
 3. Apply the game reducer
 4. Run `validateGameState`
-5. Save authoritative state
-6. Broadcast filtered state
+5. Transactionally save authoritative state
+6. Publish revision-matched public and UID-private views
 
 The same core validation code can therefore protect:
 

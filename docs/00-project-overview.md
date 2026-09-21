@@ -56,7 +56,7 @@ The gameplay path is locally implemented and emulator-verified through a complet
 - spectators
 - sophisticated AI
 - expansion-selection UI or custom deck building
-- full animation and sound production
+- final animation and audio-content polish
 
 ## 3. Standard game format
 
@@ -123,10 +123,13 @@ src/game/ai/             replaceable computer strategy (MVP milestone)
 src/game/serialization/  schema-versioned local game storage
 src/game/presentation/   player profile, UI timing, and event-derived announcements
 src/game/assets/         asset manifest, cache versioning, and runtime preloading
+src/game/audio/          centralized audio manifest, playback, and game-event mapping
+src/game/settings/       versioned application settings and React provider
+src/game/tutorials/      tutorial catalog, deterministic lessons, and completion persistence
 src/game/network/        Online Table protocol, authority, private views, and Firebase client
 functions/               Firebase trusted initialization and command transactions
 src/game/sandbox/        deterministic scenario builders
-src/components/          React presentation as the board is built
+src/components/          React presentation and action dispatch
 public/assets/           browser-served card and branding assets
 public/assets/backgrounds/ tavern menu and physical tabletop environments
 assets/cards/            source copies of current complete-card art
@@ -181,7 +184,7 @@ The board must provide keyboard-operable semantic controls, visible focus, usefu
 
 Desktop remains the first presentation target, with responsive safety rather than a separate mobile rules flow.
 
-The Solo board uses controller-neutral player seats around a shared table. Card inspection, paced one-action computer decisions, and event announcements are presentation concerns layered on top of immediate deterministic state transitions. See `06-tabletop-ux-and-presentation.md`.
+The shared board uses controller-neutral player seats for Solo, Online Table, and Classic Training. Card inspection, paced one-action computer decisions, and event announcements are presentation concerns layered on top of immediate deterministic state transitions. See `06-tabletop-ux-and-presentation.md`.
 
 ## 12. Development principles
 

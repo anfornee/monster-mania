@@ -11,7 +11,7 @@ Current product modes:
 
 - Exactly 2 participants
 - Solo Game: 1 local human and 1 computer controller
-- Future Online Table: 2 remote-human controllers on separate clients
+- Online Table: 2 remote-human controllers on separate clients
 - Each participant has a private hand
 
 Controller type determines who chooses an action, not which gameplay rules apply. Local humans, remote humans, and computers submit the same `GameAction`s to the same engine. The rules should not unnecessarily assume that future versions can never support more participants, but MVP behavior and tests target exactly 2.

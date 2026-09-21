@@ -1,8 +1,8 @@
 # Tabletop UX and presentation
 
-> **Status:** Current implementation guide for the Solo Game presentation layer
+> **Status:** Current implementation guide for the shared game-board presentation layer
 
-The Solo Game is presented as two seats around a shared tavern table. This layer renders authoritative `GameState` and dispatches ordinary `GameAction`s; it does not own or duplicate gameplay rules.
+Solo Game, Online Table, and Classic Training present two seats around the same shared tavern table. The board renders authoritative or player-filtered game state and dispatches ordinary `GameAction`s; it does not own or duplicate gameplay rules.
 
 ## Board composition
 
@@ -11,7 +11,7 @@ The Solo Game is presented as two seats around a shared tavern table. This layer
 - Face-up Monsters occupy the central arena. Their requirement chips show both the required Weapon name and a check/dash state, so availability is not communicated by color alone.
 - The local seat is at the bottom with a large hand, integrated score/defeated pile, and turn control.
 - The latest event remains visible. Every event retained in the current state is available newest-first from the compact, scrollable Hunter's journal. The journal is anchored below the centered turn plaque; opening it overlays above the arena without shifting the arena or its cards off center.
-- `PlayerState` and neutral seat language remain controller-agnostic so a future Online Table can reuse the composition without pretending every opponent is a bot.
+- `PlayerState` and neutral seat language remain controller-agnostic so Solo, Online Table, and guided training reuse the composition without pretending every opponent is a bot.
 
 The production table art is `public/assets/backgrounds/board-bg.png`. Its built-in dagger, candle, cup, journal, and wear are decorative and therefore are not exposed to assistive technology.
 
@@ -67,3 +67,5 @@ Pure tests cover name normalization/storage, resumability, pacing constants, and
 The player-facing Tutorials hub lives at `/tutorials` and is a menu-level destination alongside the card gallery. Selecting Classic reveals a separate Start Tutorial action before entering the guided match. Ritual and Chaos remain descriptive Coming Soon entries with no interactive launch control until their rules exist.
 
 Classic training reuses `GameBoard`, the core catalog, and normal `GameAction` validation. Its lesson configuration determines which otherwise-legal action is available at each step; it does not introduce tutorial-only rules into the engine. The deterministic sequence covers Action chaining, selecting and confirming a forced discard, defeating a Monster with matching Weapons, and ending a turn without a defeat. That end-turn draw delivers Black Hole for the final lesson. Leaving or completing training returns naturally to the Tutorials hub, and replay starts the deterministic scenario from its first lesson.
+
+Completion is informational and stored independently for each stable tutorial mode under the versioned `monster-mania:tutorial-progress:v1` key. Malformed, unsupported, or unavailable storage falls back safely. Lesson position and tutorial `GameState` are intentionally not persisted; exiting or reloading an active lesson starts the deterministic training scenario again.

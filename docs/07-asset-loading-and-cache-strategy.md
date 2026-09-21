@@ -78,7 +78,7 @@ The logo breathes using only transform and opacity. The global `prefers-reduced-
 
 ### Measured inventory
 
-The image baseline is 31 files / 31.98 MiB. Audio adds six short files / about 0.23 MiB and five long files / about 24.98 MiB, for 42 game-visible files / about 57.20 MiB total. Only the two menu images plus six short SFX are blocking: eight files / about 4.43 MiB. The much larger long-form tier remains non-blocking and streams during playback.
+The image baseline is 31 files / 31.98 MiB. Audio adds six short files / about 0.23 MiB and nine long-form files / about 60.63 MiB, for 46 game-visible files / about 92.85 MiB total. Only the two menu images plus six short SFX are blocking: eight files / about 4.43 MiB. The much larger long-form tier remains non-blocking and streams during playback.
 
 Run the standard project checks and verify the following in a real browser:
 

@@ -1,6 +1,8 @@
 # Monster Mania — MVP Development Plan
 
-> **Goal:** deliver a trustworthy, playable Solo Game and a clearly bounded Online Table skeleton. Live network play follows after an authoritative backend is selected and implemented.
+> **Status:** Historical implementation sequence plus delivered extensions. For current architecture and remaining production gates, use `00-project-overview.md`, `04-roadmap.md`, and `08-firebase-online-lobby.md`.
+>
+> **Original goal:** deliver a trustworthy, playable Solo Game and a clearly bounded Online Table skeleton. That baseline has since been extended with an authoritative Firebase gameplay path, centralized audio and settings, and Hunter's Training.
 
 ## Milestone 0 — Repository and architecture
 
@@ -119,9 +121,9 @@ Save after accepted transitions with a schema version and timestamp. Restore onl
 
 Deliverable: a complete match, including a tie and Sudden Death, can be played against the computer and resumed after refresh.
 
-## Milestone 4 — Online Table skeleton
+## Milestone 4 — Online Table foundation and authoritative extension
 
-Build the transport-independent product and service boundary before selecting infrastructure:
+The original milestone built the transport-independent product and service boundary before selecting infrastructure:
 
 ```text
 [ Play Solo ]
@@ -131,17 +133,19 @@ Join Table
 [ _____ ] [ Join ]
 ```
 
-Use **Table** in visible copy and types. The skeleton includes short-code validation, transport-neutral commands/events, a player-filtered state contract, and an in-memory authoritative service that owns two seats, authenticates opaque seat tokens, applies actions through the engine, validates resulting state, and returns only the requesting player's private hand. The UI may add create/join/waiting/error states against a replaceable Table client interface.
+Use **Table** in visible copy and types. The foundation includes short-code validation, transport-neutral commands/events, a player-filtered state contract, and an in-memory authoritative service that owns two seats, authenticates opaque seat tokens, applies actions through the engine, validates resulting state, and returns only the requesting player's private hand.
 
-Do not:
+The delivered Firebase extension now adds anonymous identity, private and public Tables, constrained discovery, atomic membership, trusted match initialization, revisioned Callable Function commands, synchronized public/private snapshots, rematches, and explicit leave cleanup. Complete `GameState` remains server-only, and each browser receives only its own private hand plus public information.
 
-- claim that the in-memory service is deployed or reachable by another browser
+Continue to enforce these boundaries:
+
 - simulate a remote opponent inside the online flow
 - treat browser storage as authoritative multiplayer state
 - send or expose both private hands
 - bake a particular database or realtime vendor into engine types
+- describe Online Table as production-ready before deployment and a complete live two-browser verification match
 
-Deliverable: service tests protect Table lifecycle, authority, and privacy; the UI and network seam make the next integration clear while plainly explaining that live Online Table play is not connected yet.
+Deliverable: service, Functions, Rules, and emulator tests protect Table lifecycle, authority, concurrency, and privacy. The gameplay path is locally implemented and emulator-verified; production deployment and the live two-browser completion gate remain outstanding.
 
 ## Milestone 5 — Accessibility, responsive safety, and QA
 
@@ -155,6 +159,19 @@ Deliverable: service tests protect Table lifecycle, authority, and privacy; the 
 - desktop-first layout with safe narrow-screen behavior
 - no avoidable console warnings or errors
 
+## Delivered extension — audio, settings, and Hunter's Training
+
+- centralize music, ambience, and SFX through `AudioManager`
+- derive gameplay cues from authoritative events without changing game rules
+- persist master mute plus independent music, ambience, and SFX levels through versioned application settings
+- keep long-form audio non-blocking and version all public audio URLs through `GAME_ASSET_VERSION`
+- provide `/tutorials` as the permanent Hunter's Training hub
+- run Classic Training as a deterministic guided match through `GameBoard` and ordinary `GameAction`s
+- keep Ritual and Chaos as stable Coming Soon catalog entries until their rules exist
+- persist informational completion independently by tutorial mode while keeping lesson state session-only
+
+Deliverable: audio and tutorial presentation reuse the existing application, engine, assets, and settings lifecycles rather than introducing parallel rules or playback systems.
+
 Before MVP handoff:
 
 1. Run `npm run test`.
@@ -165,7 +182,9 @@ Before MVP handoff:
 6. Play a complete Solo match.
 7. Verify forced discard, Action chaining, Black Hole, final three, and Sudden Death.
 8. Verify the computer hand is not exposed in normal Solo UI.
-9. Verify Online Table copy accurately describes its disconnected status.
+9. Run `npm run test:functions` and `npm run test:firestore` when changing Online Table behavior.
+10. Verify Online Table copy distinguishes emulator verification from the remaining production/two-browser gate.
+11. Exercise Classic Training from entry through completion and replay.
 
 ## MVP definition of done
 
@@ -175,11 +194,13 @@ Before MVP handoff:
 - All rules and invariant tests pass, including expansion-regression cases.
 - Local save/restore validates state.
 - `/dev/rules` covers the documented edge cases.
-- The Online Table skeleton has consistent terminology and a backend-ready privacy boundary.
-- No UI claims that live online play exists.
+- Online Table has consistent terminology and an authoritative, privacy-preserving Firebase path.
+- No UI claims that Online Table is production-ready before the live verification gate passes.
+- Classic Training uses the shared engine and remains replayable after informational completion.
+- Audio and application settings use centralized, versioned ownership.
 - Accessibility requirements are met for the implemented flows.
 - Tests, lint, type checking, and production build pass.
 
-## After the MVP — functional Online Tables
+## Remaining Online Table completion and hardening
 
-Live two-browser play requires the next roadmap phase: an authoritative service, Table membership and seat identity, action validation, filtered player views, realtime synchronization, lifecycle cleanup, and reconnect behavior. Database/persistence technology should be selected at that point based on hosting, operational needs, and expected scale.
+The authoritative Firebase path, Table membership, action validation, filtered player views, realtime synchronization, rematches, explicit cleanup, and same-browser-profile restoration are implemented and emulator-verified. Production readiness still requires deploying Functions, Rules, indexes, and Hosting, then completing the documented live two-browser full-match verification. Disconnect presence, abandoned-Table expiration, App Check enforcement, rate limiting, structured abuse monitoring, and cross-device recovery remain later hardening work.

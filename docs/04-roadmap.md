@@ -30,6 +30,10 @@ Primary playable MVP target:
 - local save/resume with validation
 - desktop-first presentation with responsive safety
 - keyboard and screen-reader-friendly interaction
+- centralized music, ambience, and event-derived SFX
+- versioned master mute plus independent music, ambience, and SFX settings
+- replayable Classic Hunter's Training through the shared engine and game board
+- stable Coming Soon tutorial entries for Ritual and Chaos without speculative rules
 
 The computer controller chooses actions; it never changes state directly or owns a separate version of the rules.
 
@@ -176,7 +180,7 @@ Avoid a collectible deck-builder until the product actually needs one.
 - alternate rule variants
 - match history and player profiles
 - achievements/statistics
-- full sound and music
+- additional music, SFX, mix tuning, and audio accessibility refinements
 - richer card/Monster animation
 - custom card backs and seasonal content
 
